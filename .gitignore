@@ -1,0 +1,29 @@
+# Build artifacts
+Debug/
+Release/
+*.o
+*.obj
+*.elf
+*.bin
+*.out
+*.map
+
+# CCS project files (keep .project and .cproject if sharing CCS settings)
+.launches/
+.settings/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Keys and certificates (never commit these)
+*.pem
+*.der
+*.key
+*.crt
+
+# IDE
+.vscode/
+*.swp
+*.swo
+*~
