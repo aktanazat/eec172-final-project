@@ -389,9 +389,11 @@ static int http_post_json(int sock, const char *json)
     if (ret < 0) return ret;
 
     ret = sl_Recv(sock, recvBuf, sizeof(recvBuf) - 1, 0);
+    if (ret == SL_EAGAIN) return 0;
     if (ret < 0) return ret;
     recvBuf[ret] = 0;
-    return 0;
+    if (strstr(recvBuf, "200 OK") || strstr(recvBuf, "204 No Content")) return 0;
+    return -2;
 }
 
 static int http_get_shadow(int sock, char *resp, int respSize)
@@ -408,6 +410,7 @@ static int http_get_shadow(int sock, char *resp, int respSize)
     ret = sl_Send(sock, sendBuf, strlen(sendBuf), 0);
     if (ret < 0) return ret;
     ret = sl_Recv(sock, resp, respSize - 1, 0);
+    if (ret == SL_EAGAIN) return -1;
     if (ret < 0) return ret;
     resp[ret] = '\0';
     return ret;
@@ -416,15 +419,23 @@ static int http_get_shadow(int sock, char *resp, int respSize)
 static void awsShadowUpdate(int collision)
 {
     char payload[320];
+    int postRet;
     snprintf(payload, sizeof(payload),
         "{\"state\":{\"reported\":{\"mode\":%d,\"speed\":%d,\"front\":%d,\"right\":%d,\"left\":%d,\"rear\":%d,\"collision\":%s}}}",
         g_mode, g_speed, g_front, g_right, g_left, g_rear, collision ? "true" : "false");
 
     if (g_sockID < 0) g_sockID = tls_connect();
-    if (g_sockID >= 0 && http_post_json(g_sockID, payload) < 0) {
+    if (g_sockID < 0) return;
+
+    postRet = http_post_json(g_sockID, payload);
+    if (postRet < 0) {
+        UART_PRINT("Shadow POST failed: %d\n\r", postRet);
         sl_Close(g_sockID);
         g_sockID = tls_connect();
-        if (g_sockID >= 0) http_post_json(g_sockID, payload);
+        if (g_sockID >= 0) {
+            postRet = http_post_json(g_sockID, payload);
+            if (postRet < 0) UART_PRINT("Shadow POST retry failed: %d\n\r", postRet);
+        }
     }
 }
 

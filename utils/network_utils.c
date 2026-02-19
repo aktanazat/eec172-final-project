@@ -497,6 +497,7 @@ long printErrConvenience(char * msg, long retVal) {
 int tls_connect() {
     SlSockAddrIn_t    Addr;
     int    iAddrSize;
+    SlTimeval_t recvTimeout;
     unsigned char    ucMethod = SL_SO_SEC_METHOD_TLSV1_2;
     unsigned int uiIP;
 //    unsigned int uiCipher = SL_SEC_MASK_TLS_ECDHE_RSA_WITH_AES_256_CBC_SHA;
@@ -531,6 +532,15 @@ int tls_connect() {
     iSockID = sl_Socket(SL_AF_INET,SL_SOCK_STREAM, SL_SEC_SOCKET);
     if( iSockID < 0 ) {
         return printErrConvenience("Device unable to create secure socket \n\r", iSockID);
+    }
+
+    recvTimeout.tv_sec = 2;
+    recvTimeout.tv_usec = 0;
+    lRetVal = sl_SetSockOpt(iSockID, SL_SOL_SOCKET, SL_SO_RCVTIMEO,
+                            (unsigned char *)&recvTimeout, sizeof(recvTimeout));
+    if (lRetVal < 0) {
+        sl_Close(iSockID);
+        return printErrConvenience("Device couldn't set socket options \n\r", lRetVal);
     }
 
     //
