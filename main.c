@@ -371,6 +371,7 @@ static int http_post_json(int sock, const char *json)
 {
     char sendBuf[900];
     char recvBuf[512];
+    char *lineEnd;
     char lenBuf[16];
     char *p = sendBuf;
     int ret;
@@ -393,6 +394,9 @@ static int http_post_json(int sock, const char *json)
     if (ret < 0) return ret;
     recvBuf[ret] = 0;
     if (strstr(recvBuf, "200 OK") || strstr(recvBuf, "204 No Content")) return 0;
+    lineEnd = strstr(recvBuf, "\r\n");
+    if (lineEnd) *lineEnd = '\0';
+    UART_PRINT("Shadow POST HTTP: %s\n\r", recvBuf);
     return -2;
 }
 
