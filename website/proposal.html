@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ParkPilot Proposal | EEC172 Final Project</title>
+    <meta
+      name="description"
+      content="ParkPilot is an autonomous obstacle-avoidance and self-parking RC car built on CC3200 with AWS telemetry."
+    />
+    <link rel="stylesheet" href="proposal.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="logo" href="index.html">PARKPILOT</a>
+        <nav class="top-nav">
+          <a href="#description">Description</a>
+          <a href="#design">Design</a>
+          <a href="#goals">Goals</a>
+          <a href="#bom">BOM</a>
+          <a href="#timeline">Timeline</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="top" class="page">
+      <section class="hero">
+        <p class="eyebrow">EEC172 Final Project Proposal</p>
+        <h1>ParkPilot: Autonomous Obstacle Avoidance and Self Parking RC Car</h1>
+        <p class="lede">
+          A constrained embedded autonomy platform using CC3200 + Arduino, ultrasonic
+          sensing, and AWS telemetry for guidance and collision alerting.
+        </p>
+        <div class="meta-row">
+          <div>
+            <span>Team</span>
+            <p>Aktan Azat, Gezheng Kang</p>
+          </div>
+          <div>
+            <span>Date</span>
+            <p>February 2026</p>
+          </div>
+          <div>
+            <span>Modes</span>
+            <p>IDLE / MANUAL / AUTO AVOID / SELF PARK</p>
+          </div>
+          <div>
+            <span>Total Cost</span>
+            <p>About $29</p>
+          </div>
+        </div>
+      </section>
+
+      <section id="description" class="section">
+        <h2>1. Description</h2>
+        <div class="copy-grid">
+          <p>
+            ParkPilot is an RC car controlled by a CC3200 that avoids obstacles,
+            parallel-parks itself, and sends telemetry to AWS. An IR remote selects between
+            manual drive, autonomous obstacle avoidance, and self-parking. Four ultrasonic
+            sensors provide proximity data rendered as a radar map on a 128x128 OLED, while
+            an Arduino co-processor handles sensor reads and motor actuation over UART.
+          </p>
+          <p>
+            AWS IoT is used for telemetry and parking guidance. Device Shadow stores sensor
+            distances, mode, and speed. IoT Rule triggers Lambda to generate parking
+            guidance in S3. A separate SNS rule emails collision alerts when the BMA222
+            accelerometer detects impact.
+          </p>
+        </div>
+        <div class="comparison-card">
+          Existing hobby autonomous cars often rely on camera pipelines and heavier compute.
+          ParkPilot uses ultrasonic ranging and classical control on constrained hardware
+          with cloud-assisted guidance.
+        </div>
+      </section>
+
+      <section id="design" class="section">
+        <h2>2. Design</h2>
+
+        <h3>2.1 Functional Specification</h3>
+        <div class="mode-grid">
+          <article class="card">
+            <h4>IDLE</h4>
+            <p>Car stationary. OLED shows WiFi status, battery, and mode prompt.</p>
+          </article>
+          <article class="card">
+            <h4>MANUAL</h4>
+            <p>IR directional control and speed control with live radar on OLED.</p>
+          </article>
+          <article class="card">
+            <h4>AUTO AVOID</h4>
+            <p>Forward drive with threshold-based steering toward open clearance.</p>
+          </article>
+          <article class="card">
+            <h4>SELF PARK</h4>
+            <p>Gap detection, cloud guidance request, then parallel parking sequence.</p>
+          </article>
+        </div>
+
+        <div class="callout-grid">
+          <article class="callout">
+            <h4>Parking Sequence</h4>
+            <p>
+              Pull forward past gap, cut wheel and reverse in, straighten and pull forward,
+              then fine-adjust with sensor feedback.
+            </p>
+          </article>
+          <article class="callout">
+            <h4>Collision Detection</h4>
+            <p>
+              BMA222 runs in parallel during active modes. Threshold spike triggers emergency
+              stop, red OLED flash, and SNS email through Shadow update.
+            </p>
+          </article>
+        </div>
+
+        <h3>2.2 System Architecture</h3>
+        <div class="arch-grid">
+          <article class="card">
+            <h4>CC3200 Main MCU</h4>
+            <ul>
+              <li>Mode management and parking state machine</li>
+              <li>SPI OLED radar rendering</li>
+              <li>I2C BMA222 collision monitor</li>
+              <li>WiFi telemetry to AWS IoT and Shadow</li>
+              <li>UART command and sensor frame exchange</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h4>Arduino Co-processor</h4>
+            <ul>
+              <li>4x HC-SR04 reads using pulseIn at about 20 Hz</li>
+              <li>UART sensor packet stream to CC3200</li>
+              <li>PWM generation for steering servo and L293D</li>
+              <li>Real-time motor command execution</li>
+            </ul>
+          </article>
+        </div>
+
+        <div class="protocol-grid">
+          <article>
+            <h4>Sensor Frame</h4>
+            <pre><code>$S,&lt;front_cm&gt;,&lt;rear_cm&gt;,&lt;left_cm&gt;,&lt;right_cm&gt;\n</code></pre>
+          </article>
+          <article>
+            <h4>Motor Command</h4>
+            <pre><code>$M,&lt;speed_pct&gt;,&lt;steer_angle&gt;\n</code></pre>
+          </article>
+        </div>
+
+        <div class="list-grid">
+          <article class="card">
+            <h4>Communication Protocols</h4>
+            <ul>
+              <li>SPI: CC3200 to OLED</li>
+              <li>I2C: CC3200 to BMA222</li>
+              <li>UART: CC3200 to Arduino</li>
+              <li>GPIO Interrupt: IR receiver to CC3200</li>
+              <li>HTTPS/REST: CC3200 to AWS</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h4>Sensors</h4>
+            <ul>
+              <li>HC-SR04 x4: front, rear, left, right proximity</li>
+              <li>TSOP381xx IR receiver x1: remote control input</li>
+              <li>BMA222 accelerometer x1: collision detection</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section id="goals" class="section">
+        <h2>3. Implementation Goals</h2>
+        <div class="goals-grid">
+          <article class="card">
+            <h4>Minimal Goals</h4>
+            <ul>
+              <li>Car assembly with motors, battery, and Arduino</li>
+              <li>Ultrasonic readout and UART transmission</li>
+              <li>CC3200 UART parsing and OLED distance display</li>
+              <li>IR mode switching and manual drive</li>
+              <li>Autonomous obstacle avoidance</li>
+              <li>AWS Shadow telemetry during demo</li>
+              <li>Standalone boot from flash</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h4>Target Goals</h4>
+            <ul>
+              <li>Real-time top-down OLED radar map</li>
+              <li>BMA222 collision-triggered SNS alert</li>
+              <li>All three modes switchable by IR</li>
+              <li>Self parking with Lambda guidance</li>
+              <li>Two-minute live demo sequence</li>
+              <li>Clean wiring and packaging</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h4>Stretch Goals</h4>
+            <ul>
+              <li>Lambda parking arc trajectory and S3 guidance image</li>
+              <li>OLED overlay of fetched guidance image</li>
+              <li>Speed-proportional avoidance behavior</li>
+              <li>Buffered telemetry replay after reconnect</li>
+            </ul>
+          </article>
+        </div>
+
+        <article class="metrics card">
+          <h4>Verification Metrics</h4>
+          <ul>
+            <li>Obstacle course completion: 3 or more clean runs</li>
+            <li>Parking success rate: 8/10 in standard slot</li>
+            <li>Collisions during scripted demo: 0</li>
+            <li>Mode switch response: under 300 ms</li>
+            <li>Sensor update freshness: under 100 ms</li>
+          </ul>
+        </article>
+      </section>
+
+      <section id="bom" class="section">
+        <h2>4. Bill of Materials</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Item</th>
+                <th>Qty</th>
+                <th>Source</th>
+                <th>Cost</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>CC3200 LaunchPad</td><td>1</td><td>Lab kit</td><td>$0</td></tr>
+              <tr><td>Adafruit OLED 1.5" (SSD1351)</td><td>1</td><td>Lab kit</td><td>$0</td></tr>
+              <tr><td>AT&amp;T S10-S3 IR Remote</td><td>1</td><td>Lab kit</td><td>$0</td></tr>
+              <tr><td>TSOP381xx IR Receiver</td><td>1</td><td>Lab kit</td><td>$0</td></tr>
+              <tr><td>100 Ohm Resistor</td><td>1</td><td>Lab kit</td><td>$0</td></tr>
+              <tr><td>100 uF Capacitor</td><td>1</td><td>Lab kit</td><td>$0</td></tr>
+              <tr><td>Arduino Uno R3</td><td>1</td><td>Arduino kit</td><td>$0</td></tr>
+              <tr><td>HC-SR04 Ultrasonic Sensor</td><td>1</td><td>Arduino kit</td><td>$0</td></tr>
+              <tr><td>HC-SR04 Ultrasonic Sensor</td><td>3</td><td>Amazon</td><td>~$6</td></tr>
+              <tr><td>L293D Motor Driver IC</td><td>1</td><td>Arduino kit</td><td>$0</td></tr>
+              <tr><td>Servo Motor</td><td>1</td><td>Arduino kit</td><td>$0</td></tr>
+              <tr><td>Active Buzzer</td><td>1</td><td>Arduino kit</td><td>$0</td></tr>
+              <tr><td>830-point Breadboard</td><td>1</td><td>Arduino kit</td><td>$0</td></tr>
+              <tr><td>9V Battery + Snap Connector</td><td>1</td><td>Arduino kit</td><td>$0</td></tr>
+              <tr><td>RC Car Chassis + DC Motors</td><td>1</td><td>Amazon</td><td>~$12</td></tr>
+              <tr><td>7.4V Li-Po Battery (drive power)</td><td>1</td><td>Amazon</td><td>~$8</td></tr>
+              <tr><td>Jumper wires (M-M, M-F)</td><td>~30</td><td>Arduino kit</td><td>$0</td></tr>
+              <tr><td>Zip ties + double-sided tape</td><td>1 pack</td><td>Hardware store</td><td>~$3</td></tr>
+              <tr class="total-row"><td>Total</td><td></td><td></td><td>~$29</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="comparison-card">
+          Arduino kit components cover most control electronics. L293D replaces L298N,
+          active buzzer provides audible collision alerts, and 7.4V LiPo powers the drive
+          motors while 9V is used for bench logic testing.
+        </div>
+      </section>
+
+      <section id="tasks" class="section">
+        <h2>5. Task Division</h2>
+        <div class="table-wrap small-table">
+          <table>
+            <thead>
+              <tr>
+                <th>Area</th>
+                <th>Lead</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Arduino firmware (sensors, motors, UART)</td><td>Gezheng</td></tr>
+              <tr><td>CC3200 UART parsing + OLED radar</td><td>Aktan</td></tr>
+              <tr><td>IR remote + mode state machine</td><td>Aktan</td></tr>
+              <tr><td>AWS IoT (Shadow, Lambda, S3, SNS)</td><td>Aktan</td></tr>
+              <tr><td>Parking algorithm</td><td>Both</td></tr>
+              <tr><td>Physical assembly + wiring</td><td>Both</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="timeline" class="section">
+        <h2>6. Timeline</h2>
+        <div class="timeline-grid">
+          <article class="card"><h4>Week 8</h4><p>Proposal submitted. Car purchased. Arduino sensor bench test.</p></article>
+          <article class="card"><h4>Week 8-9</h4><p>Arduino firmware complete. CC3200 UART parsing. IR modes. OLED radar prototype.</p></article>
+          <article class="card"><h4>Week 9</h4><p>Full integration, avoidance tuning, and AWS telemetry path.</p></article>
+          <article class="card"><h4>Week 9-10</h4><p>Parking algorithm, Lambda/S3 guidance, collision detection, and SNS alerts.</p></article>
+          <article class="card"><h4>Week 10</h4><p>System polish, wiring cleanup, and demo rehearsal.</p></article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <p>PARKPILOT</p>
+        <p>Aktan Azat + Gezheng Kang</p>
+        <p>EEC172 - <span id="year"></span></p>
+      </div>
+    </footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>

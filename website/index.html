@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ParkPilot | EEC172 Final Project</title>
+    <meta
+      name="description"
+      content="ParkPilot is an autonomous obstacle-avoidance and self-parking RC car built on CC3200 with AWS telemetry."
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="topbar-inner">
+        <a class="logo" href="#top">PARKPILOT</a>
+
+        <nav class="top-nav">
+          <a href="#drive">Drive</a>
+          <a href="#avoid">Avoid</a>
+          <a href="#park">Park</a>
+          <a href="#cloud">Cloud</a>
+        </nav>
+
+        <div class="top-actions">
+          <a href="#process">Process</a>
+          <a href="proposal.html">Proposal +</a>
+        </div>
+      </div>
+    </header>
+
+    <main id="top" class="page">
+      <section class="media-grid">
+        <article class="tile hero-tile">
+          <div class="hero-copy">
+            <p class="kicker">EEC172 FINAL PROJECT</p>
+            <h1>PARKPILOT</h1>
+            <p>
+              Autonomous obstacle avoidance, self parking, and cloud telemetry on constrained
+              embedded hardware.
+            </p>
+            <div class="hero-links">
+              <a href="#process">How It Works</a>
+              <a href="#proof">Proof Targets</a>
+            </div>
+          </div>
+        </article>
+
+        <article class="tile mode-tile avoid-tile" id="avoid-tile">
+          <span>Auto Avoid</span>
+        </article>
+
+        <article class="tile mode-tile park-tile" id="park-tile">
+          <span>Self Park</span>
+        </article>
+
+        <article class="tile mode-tile proof-tile" id="proof-tile">
+          <span>Verification</span>
+        </article>
+      </section>
+
+      <section class="module-stack">
+        <article class="module-detail" id="drive">
+          <div class="module-head">
+            <p class="section-kicker">DRIVE</p>
+            <h2>Manual control and immediate response</h2>
+            <p>Direct operator control through IR input during manual mode.</p>
+          </div>
+          <ul>
+            <li>Directional control from remote buttons</li>
+            <li>Speed adjustment from remote keys</li>
+            <li>Live OLED mode and proximity feedback</li>
+          </ul>
+        </article>
+
+        <article class="module-detail" id="avoid">
+          <div class="module-head">
+            <p class="section-kicker">AVOID</p>
+            <h2>Deterministic obstacle avoidance loop</h2>
+            <p>Front-threshold gate with left-right comparison and safe recovery.</p>
+          </div>
+          <ul>
+            <li>Forward scan with front threshold gate</li>
+            <li>Left-right clearance comparison</li>
+            <li>Reverse and rescan when blocked</li>
+          </ul>
+        </article>
+
+        <article class="module-detail" id="park">
+          <div class="module-head">
+            <p class="section-kicker">PARK</p>
+            <h2>Parallel parking state machine</h2>
+            <p>Cloud-guided park sequence with local fallback when needed.</p>
+          </div>
+          <ul>
+            <li>Right-side wall following and gap detection</li>
+            <li>Guidance request before park maneuver</li>
+            <li>Sensor-based fine adjustment at completion</li>
+          </ul>
+        </article>
+
+        <article class="module-detail" id="cloud">
+          <div class="module-head">
+            <p class="section-kicker">CLOUD</p>
+            <h2>AWS telemetry and guidance pipeline</h2>
+            <p>Telemetry, cloud guidance, and collision alerting in one flow.</p>
+          </div>
+          <ul>
+            <li>Device shadow updates for mode and distances</li>
+            <li>Lambda guidance generation and S3 retrieval</li>
+            <li>SNS alert on collision threshold trigger</li>
+          </ul>
+        </article>
+      </section>
+
+      <section id="process" class="process-section">
+        <p class="section-kicker">PROCESS VISUALIZATION</p>
+        <h2>How ParkPilot executes from input to motion</h2>
+        <div class="process-grid">
+          <article class="process-card">
+            <h3>Input Layer</h3>
+            <ol class="step-list">
+              <li><span>01</span>Mode select from IR command</li>
+              <li><span>02</span>Sensor stream from Arduino + BMA222</li>
+            </ol>
+          </article>
+          <article class="process-card">
+            <h3>Control Layer</h3>
+            <ol class="step-list">
+              <li><span>03</span>State machine decision on CC3200</li>
+              <li><span>04</span>UART command to steering and motor PWM</li>
+            </ol>
+          </article>
+          <article class="process-card">
+            <h3>Cloud Layer</h3>
+            <ol class="step-list">
+              <li><span>05</span>IoT shadow sync for mode and distances</li>
+              <li><span>06</span>Lambda guidance and SNS alert feedback</li>
+            </ol>
+          </article>
+        </div>
+      </section>
+
+      <section class="results-stack">
+        <article id="demo" class="data-card">
+          <h2>Demo Sequence</h2>
+          <ol>
+            <li>Manual control check</li>
+            <li>Autonomous obstacle avoidance run</li>
+            <li>Self parking pass</li>
+            <li>Telemetry and collision safety check</li>
+          </ol>
+        </article>
+
+        <article id="system" class="data-card">
+          <h2>System Split</h2>
+          <ul>
+            <li>CC3200: mode state machine, parking logic, OLED, WiFi telemetry</li>
+            <li>Arduino: ultrasonic reads, UART frames, steering + motor PWM</li>
+            <li>Sensor frame: <code>$S,&lt;front&gt;,&lt;rear&gt;,&lt;left&gt;,&lt;right&gt;\n</code></li>
+            <li>Motor command: <code>$M,&lt;speed_pct&gt;,&lt;steer_angle&gt;\n</code></li>
+          </ul>
+        </article>
+
+        <article id="proof" class="data-card">
+          <h2>Proof Targets</h2>
+          <ul>
+            <li>3+ clean auto-avoid runs</li>
+            <li>8/10 successful parallel parking</li>
+            <li>0 collisions in scripted demo</li>
+            <li>Mode switch target under 300 ms</li>
+          </ul>
+        </article>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="footer-inner">
+        <p>PARKPILOT</p>
+        <p>Aktan Azat + Gezheng Kang</p>
+        <p>EEC172 - <span id="year"></span></p>
+      </div>
+    </footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>
