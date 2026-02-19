@@ -667,6 +667,9 @@ int main(void)
     I2C_IF_Open(I2C_MASTER_MODE_FST);
 
 #ifndef SELF_TEST
+    g_app_config.host = (signed char *)SERVER_NAME;
+    g_app_config.port = SERVER_PORT;
+
     connectToAccessPoint();
     set_time();
     g_sockID = tls_connect();
