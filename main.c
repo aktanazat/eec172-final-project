@@ -35,6 +35,10 @@
 #include "i2c_if.h"
 #include "utils/network_utils.h"
 
+#if defined(SELF_TEST) && !defined(PARKPILOT_ENABLE_SELF_TEST)
+#undef SELF_TEST
+#endif
+
 #define APPLICATION_NAME      "ParkPilot"
 #define APPLICATION_VERSION   "v1"
 #define SERVER_NAME           "a126k3e19n75q0-ats.iot.us-east-2.amazonaws.com"
