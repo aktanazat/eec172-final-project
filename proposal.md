@@ -10,9 +10,9 @@
 
 ParkPilot is an autonomous RC car platform built around the CC3200 microcontroller that can navigate obstacles, parallel-park itself, and stream live telemetry to the cloud. The car operates in three user-selectable modes controlled via an IR remote: manual drive, autonomous obstacle avoidance, and self-parking. Four ultrasonic sensors provide 360-degree proximity awareness, rendered in real-time as a top-down radar map on a 128x128 OLED display. An Arduino co-processor handles time-critical sensor reads and motor actuation, communicating with the CC3200 over UART.
 
-AWS IoT provides the cloud backbone. The device shadow stores live telemetry (sensor distances, mode, speed). An IoT Rule triggers a Lambda function that processes sensor snapshots into a parking guidance image, stored in S3 and fetched by the car for OLED display. A separate SNS rule sends email alerts when the on-board accelerometer detects a collision event. This creates a full edge-to-cloud-to-edge data loop representative of real-world autonomous vehicle architectures.
+Core autonomy runs locally on the car. Obstacle avoidance and self-parking remain fully functional even if WiFi is unavailable. AWS IoT is used for telemetry and optional guidance enhancements when connectivity is available. The device shadow stores live telemetry (sensor distances, mode, speed). An IoT Rule can trigger a Lambda function that generates a parking guidance image in S3 for OLED overlay. A separate SNS rule can send email alerts when the on-board accelerometer detects a collision event. This provides an edge-to-cloud loop without making cloud round-trip latency part of the critical control path.
 
-**Similar existing products:** Existing hobby autonomous cars (Donkey Car, AWS DeepRacer) rely on cameras and ML on powerful compute platforms. ParkPilot is different because it uses only ultrasonic ranging on a constrained embedded MCU, implements a classical control-algorithm approach to parking, and offloads path computation to a serverless cloud function -- demonstrating IoT principles rather than ML.
+**Similar existing products:** Existing hobby autonomous cars (Donkey Car, AWS DeepRacer) rely on cameras and ML on powerful compute platforms. ParkPilot is different because it uses only ultrasonic ranging on a constrained embedded MCU, implements a classical control-algorithm approach to parking, and uses cloud services for telemetry and optional guidance overlays rather than core control -- demonstrating IoT principles rather than ML.
 
 ---
 
@@ -25,8 +25,8 @@ AWS IoT provides the cloud backbone. The device shadow stores live telemetry (se
 ```
                          [POWER ON / BOOT]
                                |
-                        Flash boot, WiFi connect,
-                        AWS shadow sync, init sensors
+                        Flash boot, attempt WiFi connect,
+                        init sensors, optional shadow sync
                                |
                                v
           +--------------> [IDLE] <-----------------+
@@ -55,13 +55,18 @@ AWS IoT provides the cloud backbone. The device shadow stores live telemetry (se
                        /              \
                      NO                YES
                      |                  |
-                (keep scanning)   POST gap dims to AWS
+                (keep scanning)   Build local parking plan
                                        |
-                                  Lambda computes
-                                  parking arc image
-                                       |
-                                  GET image from S3,
-                                  display on OLED
+                            Cloud available + response?
+                               /                 \
+                             NO                   YES
+                             |                     |
+                    Use local plan only      POST gap dims to AWS
+                             |               Lambda computes
+                             |               parking arc image
+                             |               GET image from S3
+                             |               OLED guidance overlay
+                             +---------------------+
                                        |
                                        v
                                 [PARK EXECUTE]
@@ -86,7 +91,7 @@ AWS IoT provides the cloud backbone. The device shadow stores live telemetry (se
 At all times during MANUAL, AUTO, and PARK modes, the BMA222 accelerometer is polled. If a sudden acceleration spike exceeds a threshold (indicating impact):
 - OLED flashes a red warning
 - Car enters emergency stop
-- Shadow update triggers SNS email: "ParkPilot collision detected"
+- If cloud-connected, shadow update triggers SNS email: "ParkPilot collision detected"
 
 #### Mode Descriptions
 
@@ -95,7 +100,7 @@ At all times during MANUAL, AUTO, and PARK modes, the BMA222 accelerometer is po
 | **IDLE** | Boot / STOP pressed | Car stationary. OLED shows status screen (WiFi status, battery, mode prompt). Telemetry idle. |
 | **MANUAL** | IR button 1 | IR remote directional control. Numpad maps to direction vectors. Volume keys control speed. OLED renders live radar. |
 | **AUTO AVOID** | IR button 2 | Car drives forward. Reactive obstacle avoidance: if front sensor < threshold, compare left vs right, steer toward open side. If all blocked, reverse and re-scan. |
-| **SELF PARK** | IR button 3 | Car drives along right-side wall. Detects parking gap. Posts to cloud for path computation. Fetches guidance image. Executes parallel parking state machine. |
+| **SELF PARK** | IR button 3 | Car drives along right-side wall, detects a parking gap, and executes a local parallel parking plan. If cloud is reachable, it also overlays AWS-generated guidance on OLED before execution. |
 
 ### 2.2 System Architecture
 
@@ -112,7 +117,7 @@ At all times during MANUAL, AUTO, and PARK modes, the BMA222 accelerometer is po
 |       |       -------------> |  SNS  | --> Email alert           |
 |       |                       +-------+                          |
 +-------|----------------------------------------------------------+
-        | WiFi / HTTPS REST (GET, POST)
+        | WiFi / HTTPS REST (GET, POST, non-critical path)
         |
 +-------|----------------------------------------------------------+
 |       v                  CC3200 (Main MCU)                       |
@@ -155,7 +160,9 @@ At all times during MANUAL, AUTO, and PARK modes, the BMA222 accelerometer is po
 - Renders OLED graphics via SPI
 - Decodes IR remote via GPIO interrupts + SysTick timing (same approach as Lab 3)
 - Reads BMA222 accelerometer via I2C for collision detection
-- Communicates with AWS IoT via WiFi/HTTPS REST
+- Runs a local parking planner so parking works without cloud connectivity
+- Uses safety watchdogs: stale UART frame timeout and hard-stop distance thresholds
+- Communicates with AWS IoT via WiFi/HTTPS REST for telemetry and optional overlays
 - Sends drive commands to Arduino via UART
 - Receives sensor distance data from Arduino via UART
 
@@ -190,7 +197,7 @@ Example: $M,000,000\n      (stop)
 | **I2C** | CC3200 -> BMA222 | Collision/impact detection, tilt sensing |
 | **UART** | CC3200 <-> Arduino | Sensor data ingest + motor command relay |
 | **GPIO Interrupt** | IR Receiver -> CC3200 | Mode selection, manual drive input |
-| **HTTPS/REST** | CC3200 <-> AWS | Shadow telemetry, S3 image fetch, Lambda trigger |
+| **HTTPS/REST** | CC3200 <-> AWS | Shadow telemetry, optional S3 image fetch, Lambda trigger |
 
 #### Sensing Devices
 
@@ -210,24 +217,36 @@ Example: $M,000,000\n      (stop)
 - [ ] CC3200 receives sensor data over UART and displays raw distances on OLED
 - [ ] IR remote switches between at least 2 modes (manual + idle)
 - [ ] Manual drive mode: IR remote controls car movement
-- [ ] AWS IoT shadow updates with sensor telemetry via POST
+- [ ] Autonomous obstacle avoidance runs locally on CC3200
+- [ ] Self-parking runs locally (no cloud dependency in control path)
+- [ ] Safety watchdog halts motors on stale sensor UART frames or hard-stop front threshold
+- [ ] AWS IoT shadow updates with sensor telemetry via POST when connected
 - [ ] System boots standalone from flash
 
 ### Target Goals (Expected to achieve)
-- [ ] Autonomous obstacle avoidance mode: car navigates without hitting walls
 - [ ] OLED renders a real-time top-down radar map with color-coded proximity
 - [ ] BMA222 collision detection triggers SNS email alert via AWS IoT Rule
-- [ ] Self-parking: car detects a gap and executes a basic parallel park maneuver
 - [ ] All 3 modes fully operational and switchable via IR remote
+- [ ] Scripted 2-minute demo path: manual -> auto avoid -> self-park -> idle reset
+- [ ] Quantitative performance targets met in lab testing (see table below)
 - [ ] Clean wiring with zip-tied harness along car chassis
 
 ### Stretch Goals (If time permits)
-- [ ] Lambda computes parking arc trajectory, generates guidance image stored in S3
-- [ ] CC3200 fetches guidance image from S3 and displays on OLED before parking
-- [ ] Accumulated sensor data processed by Lambda into an environment heatmap
+- [ ] Lambda computes parking arc trajectory and stores guidance image in S3
+- [ ] CC3200 fetches guidance image from S3 and overlays it on OLED before parking
 - [ ] Speed-proportional obstacle avoidance (slow down near walls instead of binary stop/go)
 - [ ] OLED animation during parking sequence showing planned path vs actual path
-- [ ] Second OLED on rear of car showing backup camera-style proximity bars
+- [ ] Buffered telemetry upload after reconnect if WiFi temporarily drops
+
+### Verification Metrics (Used for demo readiness)
+
+| Metric | Target |
+|------|---------|
+| Obstacle course completion (auto avoid) | >= 3 consecutive clean runs |
+| Parking success rate (standard slot) | >= 8 successful parks in 10 attempts |
+| Collision count during scripted demo run | 0 |
+| Mode switch response time (IR to motion/state update) | <= 300 ms observed |
+| Sensor update freshness (Arduino to CC3200) | <= 100 ms nominal |
 
 ---
 
@@ -274,5 +293,5 @@ Example: $M,000,000\n      (stop)
 | Week 8 (Proposal due) | Proposal submitted. RC car purchased. Arduino sensor test working on bench. |
 | Week 8-9 | Arduino firmware complete (sensors + motors). CC3200 UART parsing working. IR modes functional. OLED radar rendering prototype. |
 | Week 9 | Integration: CC3200 controlling car through Arduino. Obstacle avoidance tuned. AWS telemetry posting. |
-| Week 9-10 | Parking algorithm implemented and tuned. Lambda/S3 pipeline working. Collision detection + SNS alert. |
+| Week 9-10 | Parking algorithm implemented and tuned. Optional Lambda/S3 overlay pipeline working. Collision detection + SNS alert. |
 | Week 10 (Demo) | Full system polished. Wiring cleaned up. Demo scenario rehearsed with cardboard obstacle course. |
