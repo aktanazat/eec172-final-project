@@ -45,7 +45,7 @@ Existing hobby autonomous cars (Donkey Car, AWS DeepRacer) use cameras and ML on
 - Reads 4x HC-SR04 ultrasonics using pulseIn() at ~20 Hz
 - Packages readings into UART frames for CC3200
 - Receives motor/steering commands from CC3200
-- Generates PWM for steering servo and L298N motor driver
+- Generates PWM for steering servo and L293D motor driver
 
 **UART protocol:**
 
@@ -121,16 +121,21 @@ $M,<speed_pct>,<steer_angle>\n
 | TSOP381xx IR Receiver | 1 | Lab kit | $0 |
 | 100 Ohm Resistor | 1 | Lab kit | $0 |
 | 100 uF Capacitor | 1 | Lab kit | $0 |
-| Arduino Uno | 1 | Own | $0 |
-| HC-SR04 Ultrasonic Sensor | 4 | Amazon | ~$8 |
-| L298N Dual H-Bridge Motor Driver | 1 | Amazon | ~$5 |
-| SG90 Micro Servo (steering) | 1 | Arduino kit | $0 |
-| RC Car Chassis | 1 | Amazon | ~$12 |
-| 7.4V Li-Po Battery | 1 | Amazon | ~$8 |
-| Small breadboard | 1 | Arduino kit | $0 |
+| Arduino Uno R3 | 1 | Arduino kit | $0 |
+| HC-SR04 Ultrasonic Sensor | 1 | Arduino kit | $0 |
+| HC-SR04 Ultrasonic Sensor | 3 | Amazon | ~$6 |
+| L293D Motor Driver IC | 1 | Arduino kit | $0 |
+| Servo Motor | 1 | Arduino kit | $0 |
+| Active Buzzer | 1 | Arduino kit | $0 |
+| 830-point Breadboard | 1 | Arduino kit | $0 |
+| 9V Battery + Snap Connector | 1 | Arduino kit | $0 |
+| RC Car Chassis + DC Motors | 1 | Amazon | ~$12 |
+| 7.4V Li-Po Battery (drive power) | 1 | Amazon | ~$8 |
 | Jumper wires (M-M, M-F) | ~30 | Arduino kit | $0 |
 | Zip ties + double-sided tape | 1 pack | Hardware store | ~$3 |
-| **Total** | | | **~$36** |
+| **Total** | | | **~$29** |
+
+**From Arduino kit (available, no additional cost):** UNO R3, 1x HC-SR04, L293D, servo, active buzzer, 830-point breadboard, 9V battery with snap connector, jumper wires. The L293D replaces the previously planned L298N. The active buzzer provides audible collision alerts. The 9V battery powers the Arduino and logic during bench testing; the 7.4V LiPo powers the drive motors on the car.
 
 ---
 
