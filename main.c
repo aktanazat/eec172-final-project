@@ -371,7 +371,6 @@ static int http_post_json(int sock, const char *json)
 {
     char sendBuf[900];
     char recvBuf[512];
-    char *lineEnd;
     char lenBuf[16];
     char *p = sendBuf;
     int ret;
@@ -393,11 +392,14 @@ static int http_post_json(int sock, const char *json)
     if (ret == SL_EAGAIN) return 0;
     if (ret < 0) return ret;
     recvBuf[ret] = 0;
-    if (strstr(recvBuf, "200 OK") || strstr(recvBuf, "204 No Content")) return 0;
-    lineEnd = strstr(recvBuf, "\r\n");
-    if (lineEnd) *lineEnd = '\0';
-    UART_PRINT("Shadow POST HTTP: %s\n\r", recvBuf);
-    return -2;
+
+    if (strstr(recvBuf, "HTTP/1.1 4") || strstr(recvBuf, "HTTP/1.1 5")) {
+        UART_PRINT("Shadow POST server error\n\r");
+        return -2;
+    }
+
+    // AWS may return body-only chunks on keep-alive sockets; treat as success.
+    return 0;
 }
 
 static int http_get_shadow(int sock, char *resp, int respSize)
