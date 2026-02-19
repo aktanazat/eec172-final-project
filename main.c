@@ -125,7 +125,11 @@ int g_front = 120, g_right = 120, g_left = 120, g_rear = 120;
 int g_collision = 0;
 int g_sockID = -1;
 
-char g_httpBuf[1024];
+char g_httpBuf[2048];
+char g_s3Buf[2048];
+char g_s3GuidanceUrl[1024];
+char g_lastS3GuidanceUrl[1024];
+int g_s3GuidanceFetched = 0;
 
 #ifdef SELF_TEST
 volatile int g_selfTestForceCollision = 0;
@@ -422,6 +426,121 @@ static int http_get_shadow(int sock, char *resp, int respSize)
     return ret;
 }
 
+static int extract_json_string_value(const char *json, const char *key, char *out, int outSize)
+{
+    char pattern[96];
+    const char *p;
+    int i = 0;
+
+    snprintf(pattern, sizeof(pattern), "\"%s\":\"", key);
+    p = strstr(json, pattern);
+    if (!p) return -1;
+    p += strlen(pattern);
+
+    while (*p && *p != '"' && i < outSize - 1) {
+        if (*p == '\\' && *(p + 1)) p++;
+        out[i++] = *p++;
+    }
+    out[i] = '\0';
+    return (i > 0) ? 0 : -1;
+}
+
+static int parse_https_url(const char *url, char *host, int hostSize, char *path, int pathSize)
+{
+    const char *p;
+    const char *slash;
+    int hostLen;
+    int pathLen;
+
+    if (strncmp(url, "https://", 8) != 0) return -1;
+    p = url + 8;
+    slash = strchr(p, '/');
+    if (!slash) return -1;
+
+    hostLen = (int)(slash - p);
+    if (hostLen <= 0 || hostLen >= hostSize) return -1;
+    memcpy(host, p, hostLen);
+    host[hostLen] = '\0';
+
+    pathLen = (int)strlen(slash);
+    if (pathLen <= 0 || pathLen >= pathSize) return -1;
+    memcpy(path, slash, pathLen + 1);
+    return 0;
+}
+
+static int https_get_url(const char *url, char *resp, int respSize)
+{
+    char host[256];
+    char path[1100];
+    char req[1400];
+    unsigned int uiIP;
+    SlSockAddrIn_t addr;
+    SlTimeval_t recvTimeout;
+    unsigned char ucMethod = SL_SO_SEC_METHOD_TLSV1_2;
+    unsigned int uiCipher = SL_SEC_MASK_TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256;
+    int sock;
+    long ret;
+
+    if (parse_https_url(url, host, sizeof(host), path, sizeof(path)) < 0) return -10;
+
+    ret = sl_NetAppDnsGetHostByName((signed char *)host, strlen(host), (unsigned long *)&uiIP, SL_AF_INET);
+    if (ret < 0) return (int)ret;
+
+    sock = sl_Socket(SL_AF_INET, SL_SOCK_STREAM, SL_SEC_SOCKET);
+    if (sock < 0) return sock;
+
+    ret = sl_SetSockOpt(sock, SL_SOL_SOCKET, SL_SO_SECMETHOD, &ucMethod, sizeof(ucMethod));
+    if (ret < 0) {
+        sl_Close(sock);
+        return (int)ret;
+    }
+
+    ret = sl_SetSockOpt(sock, SL_SOL_SOCKET, SL_SO_SECURE_MASK, &uiCipher, sizeof(uiCipher));
+    if (ret < 0) {
+        sl_Close(sock);
+        return (int)ret;
+    }
+
+    recvTimeout.tv_sec = 2;
+    recvTimeout.tv_usec = 0;
+    ret = sl_SetSockOpt(sock, SL_SOL_SOCKET, SL_SO_RCVTIMEO, (unsigned char *)&recvTimeout, sizeof(recvTimeout));
+    if (ret < 0) {
+        sl_Close(sock);
+        return (int)ret;
+    }
+
+    addr.sin_family = SL_AF_INET;
+    addr.sin_port = sl_Htons(443);
+    addr.sin_addr.s_addr = sl_Htonl(uiIP);
+
+    ret = sl_Connect(sock, (SlSockAddr_t *)&addr, sizeof(SlSockAddrIn_t));
+    if (ret < 0 && ret != SL_ESECSNOVERIFY) {
+        sl_Close(sock);
+        return (int)ret;
+    }
+
+    if (snprintf(req, sizeof(req), "GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", path, host) >= (int)sizeof(req)) {
+        sl_Close(sock);
+        return -11;
+    }
+
+    ret = sl_Send(sock, req, strlen(req), 0);
+    if (ret < 0) {
+        sl_Close(sock);
+        return (int)ret;
+    }
+
+    ret = sl_Recv(sock, resp, respSize - 1, 0);
+    sl_Close(sock);
+
+    if (ret == SL_EAGAIN) return -12;
+    if (ret < 0) return (int)ret;
+    resp[ret] = '\0';
+
+    if (strstr(resp, "200 OK") || strstr(resp, "\"steps\"")) return 0;
+    return -13;
+}
+
 static void awsShadowUpdate(int collision)
 {
     char payload[320];
@@ -453,8 +572,26 @@ static void requestCloudParking(void)
 
 static int hasCloudGuidance(void)
 {
+    int s3Ret;
+
     if (g_sockID < 0) return 0;
     if (http_get_shadow(g_sockID, g_httpBuf, sizeof(g_httpBuf)) < 0) return 0;
+
+    if (extract_json_string_value(g_httpBuf, "park_guidance_url", g_s3GuidanceUrl, sizeof(g_s3GuidanceUrl)) == 0) {
+        if (!g_s3GuidanceFetched || strcmp(g_s3GuidanceUrl, g_lastS3GuidanceUrl) != 0) {
+            s3Ret = https_get_url(g_s3GuidanceUrl, g_s3Buf, sizeof(g_s3Buf));
+            if (s3Ret == 0) {
+                strncpy(g_lastS3GuidanceUrl, g_s3GuidanceUrl, sizeof(g_lastS3GuidanceUrl) - 1);
+                g_lastS3GuidanceUrl[sizeof(g_lastS3GuidanceUrl) - 1] = '\0';
+                g_s3GuidanceFetched = 1;
+                UART_PRINT("S3 guidance fetched\n\r");
+            } else {
+                UART_PRINT("S3 guidance fetch failed: %d\n\r", s3Ret);
+            }
+        }
+    }
+
+    if (g_s3GuidanceFetched) return 1;
     return (strstr(g_httpBuf, "park_guidance") != NULL);
 }
 
@@ -583,6 +720,9 @@ static void runParkLogic(void)
 
         case PARK_REQUEST_CLOUD:
             g_targetSpeed = 0;
+            g_s3GuidanceFetched = 0;
+            g_s3GuidanceUrl[0] = '\0';
+            g_lastS3GuidanceUrl[0] = '\0';
             requestCloudParking();
             g_parkCounter = 0;
             g_parkState = PARK_WAIT_GUIDANCE;

@@ -34,9 +34,13 @@ Function flow:
 1. `GetThingShadow`
 2. Read `reported` distances (`front`, `right`, `left`, `rear`)
 3. Build parking guidance sequence
-4. `UpdateThingShadow` with:
+4. Write guidance JSON to S3 bucket from env var `PARKPILOT_S3_BUCKET`
+5. Generate presigned S3 GET URL
+6. `UpdateThingShadow` with:
    - `state.reported.var = "PARK_GUIDED"`
    - `state.reported.park_guidance`
+   - `state.reported.park_guidance_s3_key`
+   - `state.reported.park_guidance_url`
    - `state.reported.park_guidance_ready = true`
    - `state.desired.var = "PARK_GUIDED"`
 
@@ -51,6 +55,8 @@ Function flow:
 Lambda execution role needs:
 - `iot:GetThingShadow`
 - `iot:UpdateThingShadow`
+- `s3:PutObject`
+- `s3:GetObject`
 - `logs:CreateLogGroup`
 - `logs:CreateLogStream`
 - `logs:PutLogEvents`
@@ -58,11 +64,19 @@ Lambda execution role needs:
 Scope IoT actions to:
 `arn:aws:iot:us-east-2:658947468902:thing/akge_cc3200_board`
 
+Scope S3 actions to:
+`arn:aws:s3:::<PARKPILOT_S3_BUCKET>/*`
+
 ## 6. Firmware alignment (`main.c`)
 
 Firmware constants must match `us-east-2`:
 - `SERVER_NAME`: `a126k3e19n75q0-ats.iot.us-east-2.amazonaws.com`
 - `HOSTHEADER`: `Host: a126k3e19n75q0-ats.iot.us-east-2.amazonaws.com`
+
+Firmware park flow now:
+- Reads `park_guidance_url` from Thing Shadow
+- Performs HTTPS GET to presigned S3 URL
+- Proceeds when S3 guidance fetch succeeds (or timeout fallback)
 
 If endpoint/certs/policy do not match this Thing/region, board-to-cloud requests fail.
 
@@ -72,5 +86,7 @@ If endpoint/certs/policy do not match this Thing/region, board-to-cloud requests
 2. Save shadow with `desired.var = "PARK_REQUEST"` and sensor values.
 3. Confirm Lambda invocation in CloudWatch logs.
 4. Confirm `reported.park_guidance` and `reported.park_guidance_ready` appear.
-5. Save shadow with `reported.collision = true`.
-6. Confirm SNS email delivery.
+5. Confirm `reported.park_guidance_url` appears.
+6. Confirm UART prints `S3 guidance fetched`.
+7. Save shadow with `reported.collision = true`.
+8. Confirm SNS email delivery.

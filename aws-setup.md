@@ -45,22 +45,35 @@ Function behavior:
 1. `GetThingShadow`
 2. Read latest reported distances (`front/right/left/rear`)
 3. Build simple guidance sequence
+4. Write guidance JSON to S3 bucket `PARKPILOT_S3_BUCKET`
+5. Generate a presigned S3 GET URL (300s)
 4. `UpdateThingShadow` with:
    - `state.reported.var = "PARK_GUIDED"`
    - `state.reported.park_guidance`
+   - `state.reported.park_guidance_s3_key`
+   - `state.reported.park_guidance_url`
    - `state.reported.park_guidance_ready = true`
    - `state.desired.var = "PARK_GUIDED"`
+
+### Lambda environment
+
+- Add env var: `PARKPILOT_S3_BUCKET=<your-bucket-name>`
+- Region for bucket: `us-east-2`
+- Keep object private; CC3200 uses presigned URL from shadow.
 
 ### IAM role for Lambda
 
 Attach permissions:
 - `iot:GetThingShadow`
 - `iot:UpdateThingShadow`
+- `s3:PutObject`
+- `s3:GetObject`
 - `logs:CreateLogGroup`
 - `logs:CreateLogStream`
 - `logs:PutLogEvents`
 
 Scope IoT permissions to thing ARN for `akge_cc3200_board` if possible.
+Scope S3 permissions to `arn:aws:s3:::<your-bucket-name>/*`.
 
 ---
 
@@ -105,4 +118,5 @@ Posted by CC3200 when entering cloud-guided park stage:
 3. Force collision -> verify `collision=true` update -> SNS email arrives.
 4. Trigger park mode -> verify desired `PARK_REQUEST` appears.
 5. Check CloudWatch logs for `parkpilot_handler` invocation.
-6. Confirm shadow gets `reported.park_guidance` from Lambda.
+6. Confirm shadow gets `reported.park_guidance_url` from Lambda.
+7. Confirm UART prints `S3 guidance fetched` before park execution.
