@@ -55,8 +55,8 @@
 #define DATE    19
 #define MONTH   2
 #define YEAR    2026
-#define HOUR    10
-#define MINUTE  0
+#define HOUR    22
+#define MINUTE  30
 #define SECOND  0
 
 #define IR_GPIO_PORT         GPIOA1_BASE
