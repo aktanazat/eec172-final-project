@@ -39,7 +39,7 @@ WHERE state.desired.var = 'PARK_REQUEST'
 
 ## 3) Lambda function
 
-File in repo: `lambda/parkpilot_handler.py`
+Lambda handler source is intentionally kept out of this public repo and deployed directly in AWS Lambda.
 
 Function behavior:
 1. `GetThingShadow`

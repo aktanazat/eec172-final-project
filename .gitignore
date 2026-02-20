@@ -25,6 +25,7 @@ certs/
 *accessKeys.csv
 
 # Python cache
+lambda/
 lambda/__pycache__/
 __pycache__/
 *.pyc
