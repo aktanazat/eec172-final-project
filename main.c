@@ -4,7 +4,6 @@
 
 #include <stdio.h>
 #include <string.h>
-#include <stdlib.h>
 #include <stdbool.h>
 
 #include "simplelink.h"
@@ -39,8 +38,6 @@
 #undef SELF_TEST
 #endif
 
-#define APPLICATION_NAME      "ParkPilot"
-#define APPLICATION_VERSION   "v1"
 #define SERVER_NAME           "a126k3e19n75q0-ats.iot.us-east-2.amazonaws.com"
 #define SERVER_PORT           8443
 
@@ -75,6 +72,10 @@
 #define BMA222_ADDR          0x18
 #define COLLISION_THRESH2    280000
 
+#define SHADOW_BUF_SIZE      4096
+#define S3_BUF_SIZE          4096
+#define S3_URL_BUF_SIZE      2048
+
 #define MODE_IDLE            0
 #define MODE_MANUAL          1
 #define MODE_AVOID           2
@@ -102,7 +103,6 @@ extern uVectorEntry __vector_table;
 volatile unsigned long g_irCmd = 0;
 volatile int g_bitCount = 0;
 volatile int g_codeReady = 0;
-volatile unsigned long g_tick = 0;
 
 volatile int g_softRxActive = 0;
 volatile int g_softRxBit = -1;
@@ -117,7 +117,6 @@ int g_parkState = PARK_SEARCH_GAP;
 unsigned long g_parkCounter = 0;
 
 int g_speed = 40;
-int g_steer = 0;
 int g_targetSpeed = 0;
 int g_targetSteer = 0;
 
@@ -125,10 +124,10 @@ int g_front = 120, g_right = 120, g_left = 120, g_rear = 120;
 int g_collision = 0;
 int g_sockID = -1;
 
-char g_httpBuf[2048];
-char g_s3Buf[2048];
-char g_s3GuidanceUrl[1024];
-char g_lastS3GuidanceUrl[1024];
+char g_httpBuf[SHADOW_BUF_SIZE];
+char g_s3Buf[S3_BUF_SIZE];
+char g_s3GuidanceUrl[S3_URL_BUF_SIZE];
+char g_lastS3GuidanceUrl[S3_URL_BUF_SIZE];
 int g_s3GuidanceFetched = 0;
 
 #ifdef SELF_TEST
@@ -165,7 +164,6 @@ static void SPIInit(void)
 static void SysTickHandler(void)
 {
     g_bitCount = 0;
-    g_tick++;
 }
 
 static void IRIntHandler(void)
@@ -430,6 +428,7 @@ static int extract_json_string_value(const char *json, const char *key, char *ou
 {
     char pattern[96];
     const char *p;
+    int truncated = 0;
     int i = 0;
 
     snprintf(pattern, sizeof(pattern), "\"%s\":\"", key);
@@ -441,7 +440,9 @@ static int extract_json_string_value(const char *json, const char *key, char *ou
         if (*p == '\\' && *(p + 1)) p++;
         out[i++] = *p++;
     }
+    if (*p && *p != '"') truncated = 1;
     out[i] = '\0';
+    if (truncated) return -2;
     return (i > 0) ? 0 : -1;
 }
 
@@ -471,14 +472,15 @@ static int parse_https_url(const char *url, char *host, int hostSize, char *path
 static int https_get_url(const char *url, char *resp, int respSize)
 {
     char host[256];
-    char path[1100];
-    char req[1400];
+    char path[S3_URL_BUF_SIZE];
+    char req[3072];
     unsigned int uiIP;
     SlSockAddrIn_t addr;
     SlTimeval_t recvTimeout;
     unsigned char ucMethod = SL_SO_SEC_METHOD_TLSV1_2;
     unsigned int uiCipher = SL_SEC_MASK_TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256;
     int sock;
+    int total = 0;
     long ret;
 
     if (parse_https_url(url, host, sizeof(host), path, sizeof(path)) < 0) return -10;
@@ -531,13 +533,30 @@ static int https_get_url(const char *url, char *resp, int respSize)
     }
 
     ret = sl_Recv(sock, resp, respSize - 1, 0);
+    if (ret == SL_EAGAIN) {
+        sl_Close(sock);
+        return -12;
+    }
+    if (ret < 0) {
+        sl_Close(sock);
+        return (int)ret;
+    }
+
+    total = (int)ret;
+    resp[total] = '\0';
+
+    if (!(strstr(resp, "200 OK") || strstr(resp, "\"steps\""))) {
+        ret = sl_Recv(sock, resp + total, respSize - total - 1, 0);
+        if (ret > 0) {
+            total += (int)ret;
+            resp[total] = '\0';
+        }
+    }
+
     sl_Close(sock);
 
-    if (ret == SL_EAGAIN) return -12;
-    if (ret < 0) return (int)ret;
-    resp[ret] = '\0';
-
     if (strstr(resp, "200 OK") || strstr(resp, "\"steps\"")) return 0;
+    UART_PRINT("S3 GET unexpected response: %.96s\n\r", resp);
     return -13;
 }
 
@@ -572,12 +591,18 @@ static void requestCloudParking(void)
 
 static int hasCloudGuidance(void)
 {
+    int urlRet;
     int s3Ret;
 
     if (g_sockID < 0) return 0;
     if (http_get_shadow(g_sockID, g_httpBuf, sizeof(g_httpBuf)) < 0) return 0;
 
-    if (extract_json_string_value(g_httpBuf, "park_guidance_url", g_s3GuidanceUrl, sizeof(g_s3GuidanceUrl)) == 0) {
+    urlRet = extract_json_string_value(g_httpBuf, "park_guidance_url", g_s3GuidanceUrl, sizeof(g_s3GuidanceUrl));
+    if (urlRet == -2) {
+        UART_PRINT("park_guidance_url truncated\n\r");
+    }
+
+    if (urlRet == 0) {
         if (!g_s3GuidanceFetched || strcmp(g_s3GuidanceUrl, g_lastS3GuidanceUrl) != 0) {
             s3Ret = https_get_url(g_s3GuidanceUrl, g_s3Buf, sizeof(g_s3Buf));
             if (s3Ret == 0) {
