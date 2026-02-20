@@ -17,10 +17,17 @@ Release/
 Thumbs.db
 
 # Keys and certificates (never commit these)
+certs/
 *.pem
 *.der
 *.key
 *.crt
+*accessKeys.csv
+
+# Python cache
+lambda/__pycache__/
+__pycache__/
+*.pyc
 
 # IDE
 .vscode/
