@@ -1,85 +1,154 @@
 #include <Servo.h>
 
-// ===== PIN DEFINITIONS =====
-Servo myServo;
-int servoPin = 9;
-int motor_IN1 = 7, motor_IN2 = 8, motor_ENA = 6;
-int buzzerPin = 10;
+// ===== Pin Map =====
+const int PIN_SERVO  = 9;   // SG90 signal
+const int PIN_BUZZER = 10;  // optional buzzer
 
-// ===== SETUP =====
+// HC-SR04 pins
+const int TRIG_N = 2,  ECHO_N = 3;  // North/front
+const int TRIG_E = 4,  ECHO_E = 5;  // East/right
+const int TRIG_W = 6,  ECHO_W = 7;  // West/left
+const int TRIG_S = A0, ECHO_S = A1; // South/rear (A0/A1 as digital)
+
+Servo speedServo;
+
+// ===== Config =====
+const unsigned long SENSOR_PERIOD_MS = 500;   // 2 Hz total (human-readable)
+const unsigned long PULSE_TIMEOUT_US = 20000; // ~3.4m max
+const int MIN_CM = 2;
+const int MAX_CM = 400;
+const int JUMP_CM = 150; // reject sudden spikes
+const int INVALID_CM = 999;
+const int INTER_SENSOR_DELAY_MS = 5;
+
+unsigned long lastSensorMs = 0;
+bool streamEnabled = true;
+int lastN = INVALID_CM;
+int lastE = INVALID_CM;
+int lastW = INVALID_CM;
+int lastS = INVALID_CM;
+
 void setup() {
-  Serial.begin(9600); // Match CC3200 baud rate
-  myServo.attach(servoPin);
-  pinMode(motor_IN1, OUTPUT);
-  pinMode(motor_IN2, OUTPUT);
-  pinMode(motor_ENA, OUTPUT);
-  pinMode(buzzerPin, OUTPUT);
-  Serial.println("Arduino initialized");
+  Serial.begin(4800);
+
+  pinMode(TRIG_N, OUTPUT); pinMode(ECHO_N, INPUT);
+  pinMode(TRIG_E, OUTPUT); pinMode(ECHO_E, INPUT);
+  pinMode(TRIG_W, OUTPUT); pinMode(ECHO_W, INPUT);
+  pinMode(TRIG_S, OUTPUT); pinMode(ECHO_S, INPUT);
+
+  pinMode(PIN_BUZZER, OUTPUT);
+  speedServo.attach(PIN_SERVO);
+
+  digitalWrite(TRIG_N, LOW);
+  digitalWrite(TRIG_E, LOW);
+  digitalWrite(TRIG_W, LOW);
+  digitalWrite(TRIG_S, LOW);
+
+  Serial.println("Arduino ready");
 }
 
-// ===== MAIN LOOP =====
 void loop() {
+  // Read incoming commands
   if (Serial.available()) {
-    String cmd = Serial.readStringUntil('\n');
-    cmd.trim(); // Remove whitespace
-    Serial.print(">>> Received: ");
-    Serial.println(cmd);
-    handleCommand(cmd);
+    String line = Serial.readStringUntil('\n');
+    line.trim();
+    if (line.startsWith("$M,")) {
+      handleMotorCmd(line);
+    } else if (line.startsWith("STREAM,")) {
+      handleStreamCmd(line);
+    } else if (line.startsWith("BUZZER,")) {
+      handleBuzzerCmd(line);
+    }
+  }
+
+  // Periodic sensor frame
+  unsigned long now = millis();
+  if (streamEnabled && (now - lastSensorMs >= SENSOR_PERIOD_MS)) {
+    lastSensorMs = now;
+
+    int dN = readFilteredCm(TRIG_N, ECHO_N, lastN);
+    delay(INTER_SENSOR_DELAY_MS);
+    int dE = readFilteredCm(TRIG_E, ECHO_E, lastE);
+    delay(INTER_SENSOR_DELAY_MS);
+    int dW = readFilteredCm(TRIG_W, ECHO_W, lastW);
+    delay(INTER_SENSOR_DELAY_MS);
+    int dS = readFilteredCm(TRIG_S, ECHO_S, lastS);
+
+    lastN = dN;
+    lastE = dE;
+    lastW = dW;
+    lastS = dS;
+
+    // Send $S,<front>,<right>,<left>,<rear>\n
+    Serial.print("$S,");
+    Serial.print(dN); Serial.print(",");
+    Serial.print(dE); Serial.print(",");
+    Serial.print(dW); Serial.print(",");
+    Serial.print(dS);
+    Serial.print("\n");
   }
 }
 
-// ===== COMMAND DISPATCHER =====
-void handleCommand(String cmd) {
-  if (cmd.startsWith("SERVO,")) {
-    handleServo(cmd);
-  } else if (cmd.startsWith("MOTOR,")) {
-    handleMotor(cmd);
-  } else if (cmd.startsWith("BUZZER,")) {
-    handleBuzzer(cmd);
-  } else if (cmd.startsWith("FRAME")) {
-    sendFakeFrame();
-  } else {
-    Serial.println("ERROR: Unknown command");
-  }
+// ===== Helpers =====
+int readCm(int trigPin, int echoPin) {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  unsigned long dur = pulseIn(echoPin, HIGH, PULSE_TIMEOUT_US);
+  if (dur == 0) return INVALID_CM; // timeout / no echo
+  int cm = (int)(dur / 58);
+  if (cm < MIN_CM || cm > MAX_CM) return INVALID_CM;
+  return cm;
 }
 
-// ===== SERVO CONTROL =====
-void handleServo(String cmd) {
-  int angle = cmd.substring(6).toInt();
-  angle = constrain(angle, 0, 180);
-  myServo.write(angle);
-  Serial.print("Servo -> ");
-  Serial.println(angle);
+int readFilteredCm(int trigPin, int echoPin, int lastValue) {
+  int cm = readCm(trigPin, echoPin);
+  if (cm == INVALID_CM) return (lastValue == INVALID_CM) ? INVALID_CM : lastValue;
+  if (lastValue != INVALID_CM && abs(cm - lastValue) > JUMP_CM) return lastValue;
+  return cm;
 }
 
-// ===== MOTOR CONTROL =====
-void handleMotor(String cmd) {
-  int comma1 = cmd.indexOf(',');
-  int comma2 = cmd.indexOf(',', comma1 + 1);
-  int dir = cmd.substring(comma1 + 1, comma2).toInt();
-  int pwm = cmd.substring(comma2 + 1).toInt();
-  
-  pwm = constrain(pwm, 0, 255);
-  
-  digitalWrite(motor_IN1, (dir == 1) ? HIGH : LOW);
-  digitalWrite(motor_IN2, (dir == 1) ? LOW : HIGH);
-  analogWrite(motor_ENA, pwm);
-  
-  Serial.print("Motor -> dir:");
-  Serial.print(dir);
-  Serial.print(" pwm:");
-  Serial.println(pwm);
+void handleMotorCmd(const String &line) {
+  // Format: $M,<speed_pct>,<steer_angle>
+  int c1 = line.indexOf(',', 3);
+  if (c1 < 0) return;
+
+  int speedPct = line.substring(3, c1).toInt();   // 0..100
+  int steerDeg = line.substring(c1 + 1).toInt();  // 0..180
+
+  speedPct = constrain(speedPct, 0, 100);
+  steerDeg = constrain(steerDeg, 0, 180);
+
+  // SG90 shows speed
+  int speedAngle = map(speedPct, 0, 100, 0, 180);
+  speedServo.write(speedAngle);
+
+  // Show steering angle on Serial Monitor
+  Serial.print("MOTOR speed_pct=");
+  Serial.print(speedPct);
+  Serial.print(" (SG90->");
+  Serial.print(speedAngle);
+  Serial.print(" deg), steer=");
+  Serial.println(steerDeg);
 }
 
-// ===== BUZZER CONTROL =====
-void handleBuzzer(String cmd) {
-  int state = cmd.substring(7).toInt();
-  digitalWrite(buzzerPin, (state == 1) ? HIGH : LOW);
-  Serial.print("Buzzer -> ");
-  Serial.println((state == 1) ? "ON" : "OFF");
+void handleStreamCmd(const String &line) {
+  // Format: STREAM,1 or STREAM,0
+  int comma = line.indexOf(',');
+  if (comma < 0) return;
+  int state = line.substring(comma + 1).toInt();
+  streamEnabled = (state != 0);
+  Serial.print("STREAM ");
+  Serial.println(streamEnabled ? "ON" : "OFF");
 }
 
-// ===== FAKE FRAME SENDER =====
-void sendFakeFrame() {
-  Serial.println("$S,050,100,030,080");
+void handleBuzzerCmd(const String &line) {
+  // Format: BUZZER,1 or BUZZER,0
+  int comma = line.indexOf(',');
+  if (comma < 0) return;
+  int state = line.substring(comma + 1).toInt();
+  digitalWrite(PIN_BUZZER, (state != 0) ? HIGH : LOW);
 }
