@@ -873,6 +873,7 @@ int main(void)
         }
 
         if (g_sensorReady) {
+            UART_PRINT("Sensor frame: %s\n\r", g_softLine);
             parseSensorFrame(g_softLine);
             g_softIdx = 0;
             g_softLine[0] = '\0';
