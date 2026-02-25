@@ -66,8 +66,9 @@
 #define SOFT_UART_TX_PIN     0x08
 #define SOFT_UART_RX_PORT    GPIOA0_BASE
 #define SOFT_UART_RX_PIN     0x10
-#define SOFT_UART_BIT_TICKS  (80000000 / 4800)
-#define SOFT_UART_DELAY      (80000000 / (3 * 4800))
+#define SOFT_UART_BAUD       4800
+#define SOFT_UART_BIT_TICKS  (80000000 / SOFT_UART_BAUD)
+#define SOFT_UART_DELAY      (80000000 / (3 * SOFT_UART_BAUD))
 
 #define BMA222_ADDR          0x18
 #define COLLISION_THRESH2    280000
@@ -108,9 +109,14 @@ volatile int g_softRxActive = 0;
 volatile int g_softRxBit = -1;
 volatile unsigned char g_softRxByte = 0;
 volatile int g_sensorReady = 0;
+volatile unsigned long g_softRxBytes = 0;
+volatile unsigned long g_softRxLines = 0;
+volatile unsigned long g_softRxOverflow = 0;
 
-char g_softLine[40];
+char g_softLine[80];
 volatile int g_softIdx = 0;
+unsigned long g_softParseOk = 0;
+unsigned long g_softParseFail = 0;
 
 int g_mode = MODE_IDLE;
 int g_parkState = PARK_SEARCH_GAP;
@@ -223,15 +229,22 @@ static void IRInit(void)
 
 static void SoftUartPushChar(unsigned char c)
 {
+    if (c == '$') {
+        g_softIdx = 0;
+    }
+
     if (g_softIdx >= (int)sizeof(g_softLine) - 1) {
+        g_softRxOverflow++;
         g_softIdx = 0;
         return;
     }
 
+    g_softRxBytes++;
     g_softLine[g_softIdx++] = (char)c;
     g_softLine[g_softIdx] = '\0';
 
-    if (c == '\n') {
+    if (c == '\n' || c == '\r') {
+        g_softRxLines++;
         g_sensorReady = 1;
     }
 }
@@ -873,11 +886,28 @@ int main(void)
         }
 
         if (g_sensorReady) {
+            int parseRet;
             UART_PRINT("Sensor frame: %s\n\r", g_softLine);
-            parseSensorFrame(g_softLine);
+            parseRet = parseSensorFrame(g_softLine);
+            if (parseRet == 0) {
+                g_softParseOk++;
+            } else {
+                g_softParseFail++;
+                UART_PRINT("Sensor frame parse failed\n\r");
+            }
             g_softIdx = 0;
             g_softLine[0] = '\0';
             g_sensorReady = 0;
+        }
+
+        if ((loop % 32) == 0) {
+            UART_PRINT("UART dbg baud=%d rxB=%lu rxL=%lu ok=%lu bad=%lu ovf=%lu\n\r",
+                       SOFT_UART_BAUD,
+                       g_softRxBytes,
+                       g_softRxLines,
+                       g_softParseOk,
+                       g_softParseFail,
+                       g_softRxOverflow);
         }
 
         if ((loop % 5) == 0) {
