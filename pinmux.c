@@ -14,6 +14,7 @@ void PinMuxConfig(void)
     MAP_PRCMPeripheralClkEnable(PRCM_GPIOA3, PRCM_RUN_MODE_CLK);
     MAP_PRCMPeripheralClkEnable(PRCM_GSPI, PRCM_RUN_MODE_CLK);
     MAP_PRCMPeripheralClkEnable(PRCM_UARTA0, PRCM_RUN_MODE_CLK);
+    MAP_PRCMPeripheralClkEnable(PRCM_UARTA1, PRCM_RUN_MODE_CLK);
     MAP_PRCMPeripheralClkEnable(PRCM_I2CA0, PRCM_RUN_MODE_CLK);
 
     // I2C for BMA222 (PIN_01/02)
@@ -40,13 +41,9 @@ void PinMuxConfig(void)
     MAP_PinTypeUART(PIN_55, PIN_MODE_3);
     MAP_PinTypeUART(PIN_57, PIN_MODE_3);
 
-    // Soft UART TX/RX
-    MAP_PinTypeGPIO(PIN_58, PIN_MODE_0, false);
-    MAP_GPIODirModeSet(GPIOA0_BASE, 0x08, GPIO_DIR_MODE_OUT);
-    MAP_GPIOPinWrite(GPIOA0_BASE, 0x08, 0x08); // idle high
-
-    MAP_PinTypeGPIO(PIN_59, PIN_MODE_0, false);
-    MAP_GPIODirModeSet(GPIOA0_BASE, 0x10, GPIO_DIR_MODE_IN);
+    // UART1 TX/RX (to Arduino)
+    MAP_PinTypeUART(PIN_58, PIN_MODE_6);
+    MAP_PinTypeUART(PIN_59, PIN_MODE_6);
 
     // Status LED
     MAP_PinTypeGPIO(PIN_64, PIN_MODE_0, false);

@@ -75,7 +75,7 @@ static void handleMotorLine(const char *s) {
 
 void setup() {
   Serial.begin(115200);
-  cc.begin(4800);
+  cc.begin(9600);
 
   pinMode(TRIG_FRONT, OUTPUT);
   pinMode(ECHO_FRONT, INPUT);

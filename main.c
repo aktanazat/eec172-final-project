@@ -62,13 +62,7 @@
 #define SYSTICK_RELOAD_VAL   8000000UL
 #define TICKS_TO_US(ticks) ((((ticks) / SYSCLKFREQ) * 1000000ULL) + ((((ticks) % SYSCLKFREQ) * 1000000ULL) / SYSCLKFREQ))
 
-#define SOFT_UART_TX_PORT    GPIOA0_BASE
-#define SOFT_UART_TX_PIN     0x08
-#define SOFT_UART_RX_PORT    GPIOA0_BASE
-#define SOFT_UART_RX_PIN     0x10
-#define SOFT_UART_BAUD       4800
-#define SOFT_UART_BIT_TICKS  (80000000 / SOFT_UART_BAUD)
-#define SOFT_UART_DELAY      (80000000 / (3 * SOFT_UART_BAUD))
+#define UART1_BAUD           9600
 
 #define BMA222_ADDR          0x18
 #define COLLISION_THRESH2    280000
@@ -105,13 +99,10 @@ volatile unsigned long g_irCmd = 0;
 volatile int g_bitCount = 0;
 volatile int g_codeReady = 0;
 
-volatile int g_softRxActive = 0;
-volatile int g_softRxBit = -1;
-volatile unsigned char g_softRxByte = 0;
 volatile int g_sensorReady = 0;
-volatile unsigned long g_softRxBytes = 0;
-volatile unsigned long g_softRxLines = 0;
-volatile unsigned long g_softRxOverflow = 0;
+unsigned long g_uart1RxBytes = 0;
+unsigned long g_uart1RxLines = 0;
+unsigned long g_uart1RxOverflow = 0;
 
 char g_softLine[80];
 volatile int g_softIdx = 0;
@@ -227,113 +218,45 @@ static void IRInit(void)
     MAP_GPIOIntEnable(IR_GPIO_PORT, IR_GPIO_PIN);
 }
 
-static void SoftUartPushChar(unsigned char c)
+static void Uart1Init(void)
 {
-    if (c == '$') {
-        g_softIdx = 0;
-    }
+    MAP_UARTConfigSetExpClk(UARTA1_BASE,
+                            MAP_PRCMPeripheralClockGet(PRCM_UARTA1),
+                            UART1_BAUD,
+                            (UART_CONFIG_WLEN_8 | UART_CONFIG_STOP_ONE |
+                             UART_CONFIG_PAR_NONE));
+    MAP_UARTEnable(UARTA1_BASE);
+}
 
-    if (g_softIdx >= (int)sizeof(g_softLine) - 1) {
-        g_softRxOverflow++;
-        g_softIdx = 0;
-        return;
-    }
+static void Uart1PollRx(void)
+{
+    while (MAP_UARTCharsAvail(UARTA1_BASE)) {
+        unsigned char c = (unsigned char)MAP_UARTCharGet(UARTA1_BASE);
+        g_uart1RxBytes++;
 
-    g_softRxBytes++;
-    g_softLine[g_softIdx++] = (char)c;
-    g_softLine[g_softIdx] = '\0';
+        if (c == '$') {
+            g_softIdx = 0;
+        }
 
-    if (c == '\n' || c == '\r') {
-        g_softRxLines++;
-        g_sensorReady = 1;
+        if (g_softIdx >= (int)sizeof(g_softLine) - 1) {
+            g_uart1RxOverflow++;
+            g_softIdx = 0;
+            continue;
+        }
+
+        g_softLine[g_softIdx++] = (char)c;
+        g_softLine[g_softIdx] = '\0';
+
+        if (c == '\n' || c == '\r') {
+            g_uart1RxLines++;
+            g_sensorReady = 1;
+        }
     }
 }
 
-static void SoftUartTimerHandler(void)
+static void Uart1TxString(const char *s)
 {
-    unsigned long status = MAP_TimerIntStatus(TIMERA0_BASE, true);
-    MAP_TimerIntClear(TIMERA0_BASE, status);
-
-    if (!g_softRxActive) return;
-
-    if (g_softRxBit == -1) {
-        g_softRxBit = 0;
-        MAP_TimerLoadSet(TIMERA0_BASE, TIMER_A, SOFT_UART_BIT_TICKS);
-        return;
-    }
-
-    if (g_softRxBit < 8) {
-        unsigned long bit = MAP_GPIOPinRead(SOFT_UART_RX_PORT, SOFT_UART_RX_PIN) ? 1 : 0;
-        g_softRxByte |= (bit << g_softRxBit);
-        g_softRxBit++;
-        return;
-    }
-
-    // Stop bit sample; finalize byte
-    SoftUartPushChar(g_softRxByte);
-    g_softRxByte = 0;
-    g_softRxBit = -1;
-    g_softRxActive = 0;
-
-    MAP_TimerDisable(TIMERA0_BASE, TIMER_A);
-    MAP_GPIOIntEnable(SOFT_UART_RX_PORT, SOFT_UART_RX_PIN);
-}
-
-static void SoftUartStartBitHandler(void)
-{
-    unsigned long status = MAP_GPIOIntStatus(SOFT_UART_RX_PORT, true);
-    MAP_GPIOIntClear(SOFT_UART_RX_PORT, status);
-    if (!(status & SOFT_UART_RX_PIN)) return;
-    if (g_softRxActive) return;
-
-    g_softRxActive = 1;
-    g_softRxBit = -1;
-    g_softRxByte = 0;
-
-    MAP_GPIOIntDisable(SOFT_UART_RX_PORT, SOFT_UART_RX_PIN);
-    MAP_TimerLoadSet(TIMERA0_BASE, TIMER_A, SOFT_UART_BIT_TICKS + (SOFT_UART_BIT_TICKS / 2));
-    MAP_TimerEnable(TIMERA0_BASE, TIMER_A);
-}
-
-static void SoftUartInit(void)
-{
-    MAP_PRCMPeripheralClkEnable(PRCM_TIMERA0, PRCM_RUN_MODE_CLK);
-    MAP_TimerConfigure(TIMERA0_BASE, TIMER_CFG_PERIODIC);
-    MAP_TimerIntRegister(TIMERA0_BASE, TIMER_A, SoftUartTimerHandler);
-    MAP_TimerIntEnable(TIMERA0_BASE, TIMER_TIMA_TIMEOUT);
-    MAP_IntEnable(INT_TIMERA0A);
-
-    MAP_GPIOIntRegister(SOFT_UART_RX_PORT, SoftUartStartBitHandler);
-    MAP_GPIOIntTypeSet(SOFT_UART_RX_PORT, SOFT_UART_RX_PIN, GPIO_FALLING_EDGE);
-    MAP_GPIOIntClear(SOFT_UART_RX_PORT, MAP_GPIOIntStatus(SOFT_UART_RX_PORT, false));
-    MAP_IntEnable(INT_GPIOA0);
-    MAP_GPIOIntEnable(SOFT_UART_RX_PORT, SOFT_UART_RX_PIN);
-}
-
-static void SoftUartTxByte(unsigned char b)
-{
-    int i;
-
-    MAP_GPIOPinWrite(SOFT_UART_TX_PORT, SOFT_UART_TX_PIN, 0x00); // start
-    MAP_UtilsDelay(SOFT_UART_DELAY);
-
-    for (i = 0; i < 8; i++) {
-        if (b & 0x01)
-            MAP_GPIOPinWrite(SOFT_UART_TX_PORT, SOFT_UART_TX_PIN, SOFT_UART_TX_PIN);
-        else
-            MAP_GPIOPinWrite(SOFT_UART_TX_PORT, SOFT_UART_TX_PIN, 0x00);
-
-        MAP_UtilsDelay(SOFT_UART_DELAY);
-        b >>= 1;
-    }
-
-    MAP_GPIOPinWrite(SOFT_UART_TX_PORT, SOFT_UART_TX_PIN, SOFT_UART_TX_PIN); // stop
-    MAP_UtilsDelay(SOFT_UART_DELAY);
-}
-
-static void SoftUartTxString(const char *s)
-{
-    while (*s) SoftUartTxByte((unsigned char)*s++);
+    while (*s) MAP_UARTCharPut(UARTA1_BASE, (unsigned char)*s++);
 }
 
 static void sendMotorCommand(int spd, int ang)
@@ -343,7 +266,7 @@ static void sendMotorCommand(int spd, int ang)
     char msg[24];
 
     snprintf(msg, sizeof(msg), "$M,%03d,%+03d\n", spd, ang);
-    SoftUartTxString(msg);
+    Uart1TxString(msg);
 
     if (spd != lastSpd || ang != lastAng) {
         UART_PRINT("Motor cmd: %s", msg);
@@ -857,7 +780,7 @@ int main(void)
     fillScreen(BLACK);
 
     IRInit();
-    SoftUartInit();
+    Uart1Init();
 
     I2C_IF_Open(I2C_MASTER_MODE_FST);
 
@@ -878,6 +801,8 @@ int main(void)
 #ifdef SELF_TEST
         runSelfTest(loop);
 #endif
+
+        Uart1PollRx();
 
         if (g_codeReady) {
             int b = IRCodeToButton(g_irCmd);
@@ -902,12 +827,12 @@ int main(void)
 
         if ((loop % 32) == 0) {
             UART_PRINT("UART dbg baud=%d rxB=%lu rxL=%lu ok=%lu bad=%lu ovf=%lu\n\r",
-                       SOFT_UART_BAUD,
-                       g_softRxBytes,
-                       g_softRxLines,
+                       UART1_BAUD,
+                       g_uart1RxBytes,
+                       g_uart1RxLines,
                        g_softParseOk,
                        g_softParseFail,
-                       g_softRxOverflow);
+                       g_uart1RxOverflow);
         }
 
         if ((loop % 5) == 0) {
