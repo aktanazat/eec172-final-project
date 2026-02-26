@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 560" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#555"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2d5ba0"/>
+    </marker>
+    <marker id="arr-grn" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2d7d2d"/>
+    </marker>
+    <marker id="arr-org" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b8860b"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="900" height="560" fill="#fafaf7" rx="6"/>
+
+  <!-- ===== CC3200 BLOCK (center) ===== -->
+  <rect x="280" y="160" width="240" height="200" rx="10" fill="#e8ecf4" stroke="#2d5ba0" stroke-width="2.5"/>
+  <text x="400" y="188" text-anchor="middle" fill="#2d5ba0" font-size="16" font-weight="700">CC3200</text>
+  <line x1="295" y1="198" x2="505" y2="198" stroke="#2d5ba0" stroke-width="1" opacity="0.4"/>
+  <text x="400" y="220" text-anchor="middle" fill="#333" font-size="10">Mode State Machine</text>
+  <text x="400" y="236" text-anchor="middle" fill="#333" font-size="10">Obstacle Avoidance</text>
+  <text x="400" y="252" text-anchor="middle" fill="#333" font-size="10">Parking Logic</text>
+  <text x="400" y="268" text-anchor="middle" fill="#333" font-size="10">OLED Rendering</text>
+  <text x="400" y="284" text-anchor="middle" fill="#333" font-size="10">IR Decoding</text>
+  <text x="400" y="300" text-anchor="middle" fill="#333" font-size="10">WiFi / TLS</text>
+  <text x="400" y="316" text-anchor="middle" fill="#333" font-size="10">Collision Detection</text>
+  <text x="400" y="340" text-anchor="middle" fill="#888" font-size="9">Boots standalone from flash</text>
+
+  <!-- ===== ARDUINO BLOCK (bottom) ===== -->
+  <rect x="280" y="430" width="240" height="110" rx="10" fill="#e8f0e8" stroke="#2d7d2d" stroke-width="2.5"/>
+  <text x="400" y="458" text-anchor="middle" fill="#2d7d2d" font-size="16" font-weight="700">Arduino Uno R3</text>
+  <line x1="295" y1="466" x2="505" y2="466" stroke="#2d7d2d" stroke-width="1" opacity="0.4"/>
+  <text x="400" y="486" text-anchor="middle" fill="#333" font-size="10">4x HC-SR04 Reads (pulseIn)</text>
+  <text x="400" y="502" text-anchor="middle" fill="#333" font-size="10">Servo PWM + L293D Motor</text>
+  <text x="400" y="518" text-anchor="middle" fill="#333" font-size="10">UART Frame Packaging</text>
+
+  <!-- UART arrow CC3200 <-> Arduino -->
+  <line x1="380" y1="360" x2="380" y2="428" stroke="#555" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="420" y1="428" x2="420" y2="360" stroke="#555" stroke-width="2" marker-end="url(#arr)"/>
+  <rect x="340" y="382" width="120" height="30" rx="4" fill="#fff" stroke="#555" stroke-width="1"/>
+  <text x="400" y="395" text-anchor="middle" fill="#555" font-size="10" font-weight="600">UART</text>
+  <text x="400" y="407" text-anchor="middle" fill="#888" font-size="8">$S / $M frames</text>
+
+  <!-- ===== OLED (left of CC3200) ===== -->
+  <rect x="40" y="170" width="140" height="70" rx="8" fill="#f4f0fa" stroke="#7b3fa0" stroke-width="2"/>
+  <text x="110" y="198" text-anchor="middle" fill="#7b3fa0" font-size="13" font-weight="600">OLED 128x128</text>
+  <text x="110" y="216" text-anchor="middle" fill="#555" font-size="10">SSD1351 Display</text>
+  <text x="110" y="230" text-anchor="middle" fill="#555" font-size="10">Radar Map + Status</text>
+
+  <!-- SPI arrow -->
+  <line x1="180" y1="205" x2="278" y2="225" stroke="#7b3fa0" stroke-width="1.8" marker-end="url(#arr)"/>
+  <text x="220" y="206" text-anchor="middle" fill="#7b3fa0" font-size="10" font-weight="600">SPI</text>
+
+  <!-- ===== BMA222 (left of CC3200, below OLED) ===== -->
+  <rect x="40" y="280" width="140" height="60" rx="8" fill="#fce8e6" stroke="#c0392b" stroke-width="2"/>
+  <text x="110" y="306" text-anchor="middle" fill="#c0392b" font-size="13" font-weight="600">BMA222</text>
+  <text x="110" y="324" text-anchor="middle" fill="#555" font-size="10">Accelerometer</text>
+
+  <!-- I2C arrow -->
+  <line x1="180" y1="310" x2="278" y2="290" stroke="#c0392b" stroke-width="1.8" marker-end="url(#arr)"/>
+  <text x="220" y="310" text-anchor="middle" fill="#c0392b" font-size="10" font-weight="600">I2C</text>
+
+  <!-- ===== IR Receiver (top-left) ===== -->
+  <rect x="40" y="60" width="140" height="60" rx="8" fill="#fff8e6" stroke="#b8860b" stroke-width="2"/>
+  <text x="110" y="86" text-anchor="middle" fill="#b8860b" font-size="13" font-weight="600">IR Receiver</text>
+  <text x="110" y="104" text-anchor="middle" fill="#555" font-size="10">TSOP381xx + Remote</text>
+
+  <!-- GPIO arrow -->
+  <path d="M180,90 Q240,90 280,170" fill="none" stroke="#b8860b" stroke-width="1.8" marker-end="url(#arr-org)"/>
+  <text x="240" y="118" text-anchor="middle" fill="#b8860b" font-size="10" font-weight="600">GPIO IRQ</text>
+
+  <!-- ===== HC-SR04 Sensors (below Arduino, left) ===== -->
+  <rect x="40" y="440" width="140" height="90" rx="8" fill="#eef6ee" stroke="#2d7d2d" stroke-width="1.5"/>
+  <text x="110" y="466" text-anchor="middle" fill="#2d7d2d" font-size="12" font-weight="600">HC-SR04 x4</text>
+  <text x="110" y="484" text-anchor="middle" fill="#555" font-size="9">Front / Rear</text>
+  <text x="110" y="498" text-anchor="middle" fill="#555" font-size="9">Left / Right</text>
+  <text x="110" y="516" text-anchor="middle" fill="#888" font-size="9">Ultrasonic Ranging</text>
+
+  <!-- HC-SR04 -> Arduino -->
+  <line x1="180" y1="485" x2="278" y2="485" stroke="#2d7d2d" stroke-width="1.8" marker-end="url(#arr-grn)"/>
+  <text x="228" y="478" text-anchor="middle" fill="#2d7d2d" font-size="10" font-weight="600">GPIO</text>
+
+  <!-- ===== Motors + Servo (right of Arduino) ===== -->
+  <rect x="620" y="420" width="140" height="60" rx="8" fill="#eef6ee" stroke="#2d7d2d" stroke-width="1.5"/>
+  <text x="690" y="446" text-anchor="middle" fill="#2d7d2d" font-size="12" font-weight="600">DC Motors x2</text>
+  <text x="690" y="462" text-anchor="middle" fill="#555" font-size="10">via L293D Driver</text>
+
+  <rect x="620" y="494" width="140" height="46" rx="8" fill="#eef6ee" stroke="#2d7d2d" stroke-width="1.5"/>
+  <text x="690" y="520" text-anchor="middle" fill="#2d7d2d" font-size="12" font-weight="600">Steering Servo</text>
+
+  <!-- Arduino -> Motors -->
+  <line x1="520" y1="480" x2="618" y2="450" stroke="#2d7d2d" stroke-width="1.8" marker-end="url(#arr-grn)"/>
+  <text x="572" y="456" text-anchor="middle" fill="#2d7d2d" font-size="10" font-weight="600">PWM</text>
+
+  <!-- Arduino -> Servo -->
+  <line x1="520" y1="505" x2="618" y2="515" stroke="#2d7d2d" stroke-width="1.8" marker-end="url(#arr-grn)"/>
+  <text x="572" y="502" text-anchor="middle" fill="#2d7d2d" font-size="10" font-weight="600">PWM</text>
+
+  <!-- ===== Buzzer (far right of Arduino) ===== -->
+  <rect x="790" y="445" width="90" height="46" rx="8" fill="#fce8e6" stroke="#c0392b" stroke-width="1.5"/>
+  <text x="835" y="472" text-anchor="middle" fill="#c0392b" font-size="11" font-weight="600">Buzzer</text>
+
+  <line x1="760" y1="450" x2="788" y2="462" stroke="#c0392b" stroke-width="1.2" marker-end="url(#arr)"/>
+
+  <!-- ===== AWS CLOUD (top-right) ===== -->
+  <rect x="580" y="30" width="290" height="310" rx="12" fill="#eef2f8" stroke="#2d5ba0" stroke-width="2" stroke-dasharray="8,4"/>
+  <text x="725" y="56" text-anchor="middle" fill="#2d5ba0" font-size="14" font-weight="700">AWS Cloud</text>
+  <line x1="596" y1="66" x2="854" y2="66" stroke="#2d5ba0" stroke-width="1" opacity="0.3"/>
+
+  <!-- IoT Core -->
+  <rect x="610" y="80" width="230" height="50" rx="6" fill="#dce6f4" stroke="#2d5ba0" stroke-width="1.5"/>
+  <text x="725" y="102" text-anchor="middle" fill="#2d5ba0" font-size="12" font-weight="600">AWS IoT Core</text>
+  <text x="725" y="118" text-anchor="middle" fill="#555" font-size="9">Device Shadow + Rules Engine</text>
+
+  <!-- Lambda -->
+  <rect x="610" y="148" width="110" height="46" rx="6" fill="#fff3e0" stroke="#e67e22" stroke-width="1.5"/>
+  <text x="665" y="170" text-anchor="middle" fill="#e67e22" font-size="11" font-weight="600">Lambda</text>
+  <text x="665" y="184" text-anchor="middle" fill="#555" font-size="9">Park guidance</text>
+
+  <!-- S3 -->
+  <rect x="736" y="148" width="110" height="46" rx="6" fill="#e8f5e9" stroke="#388e3c" stroke-width="1.5"/>
+  <text x="791" y="170" text-anchor="middle" fill="#388e3c" font-size="11" font-weight="600">S3</text>
+  <text x="791" y="184" text-anchor="middle" fill="#555" font-size="9">Guidance JSON</text>
+
+  <!-- SNS -->
+  <rect x="610" y="210" width="110" height="46" rx="6" fill="#fce4ec" stroke="#c62828" stroke-width="1.5"/>
+  <text x="665" y="232" text-anchor="middle" fill="#c62828" font-size="11" font-weight="600">SNS</text>
+  <text x="665" y="246" text-anchor="middle" fill="#555" font-size="9">Collision email</text>
+
+  <!-- IoT -> Lambda -->
+  <line x1="665" y1="130" x2="665" y2="146" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+  <!-- IoT -> SNS -->
+  <path d="M660,130 L660,138 L660,208" fill="none" stroke="#555" stroke-width="1" stroke-dasharray="3,2"/>
+  <!-- Lambda -> S3 -->
+  <line x1="720" y1="171" x2="734" y2="171" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+
+  <!-- CC3200 -> AWS (WiFi) -->
+  <path d="M520,200 Q560,120 608,105" fill="none" stroke="#2d5ba0" stroke-width="2" marker-end="url(#arr-blue)"/>
+  <rect x="538" y="128" width="64" height="28" rx="4" fill="#fff" stroke="#2d5ba0" stroke-width="1"/>
+  <text x="570" y="140" text-anchor="middle" fill="#2d5ba0" font-size="9" font-weight="600">WiFi</text>
+  <text x="570" y="151" text-anchor="middle" fill="#888" font-size="8">HTTPS/TLS</text>
+
+  <!-- S3 presigned URL back to CC3200 -->
+  <path d="M791,194 Q791,300 520,280" fill="none" stroke="#388e3c" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arr)"/>
+  <text x="680" y="280" text-anchor="middle" fill="#388e3c" font-size="8">presigned GET</text>
+
+  <!-- ===== POWER (bottom-right) ===== -->
+  <rect x="700" y="300" width="150" height="34" rx="6" fill="#f5f5f0" stroke="#888" stroke-width="1"/>
+  <text x="775" y="322" text-anchor="middle" fill="#888" font-size="10">7.4V LiPo (motors) + 9V (logic)</text>
+
+  <!-- Legend -->
+  <rect x="20" y="388" width="180" height="32" rx="4" fill="#f5f5f0" stroke="#ccc" stroke-width="1"/>
+  <line x1="30" y1="404" x2="55" y2="404" stroke="#555" stroke-width="2"/>
+  <text x="62" y="408" fill="#555" font-size="9">Wired bus</text>
+  <line x1="105" y1="404" x2="130" y2="404" stroke="#555" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="137" y="408" fill="#555" font-size="9">Wireless</text>
+</svg>

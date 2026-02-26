@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>ParkPilot Proposal</title>
+<style>
+  @page {
+    size: letter;
+    margin: 0.7in 0.75in 0.6in 0.75in;
+    @bottom-center {
+      content: counter(page);
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 9px;
+      color: #999;
+    }
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 10.5px; }
+  body {
+    font-family: Helvetica, Arial, sans-serif;
+    color: #1a1a1a;
+    line-height: 1.45;
+  }
+  h1 {
+    font-size: 18px;
+    line-height: 1.15;
+    letter-spacing: -0.01em;
+    margin-bottom: 2px;
+  }
+  h2 {
+    font-size: 14px;
+    margin-top: 14px;
+    margin-bottom: 4px;
+    padding-bottom: 2px;
+    border-bottom: 1.5px solid #222;
+  }
+  h3 {
+    font-size: 11.5px;
+    margin-top: 10px;
+    margin-bottom: 3px;
+  }
+  p { margin-bottom: 5px; }
+  .header-block {
+    border-bottom: 2px solid #111;
+    padding-bottom: 6px;
+    margin-bottom: 10px;
+  }
+  .meta {
+    display: flex;
+    justify-content: space-between;
+    font-size: 9.5px;
+    color: #555;
+    margin-top: 3px;
+  }
+  .meta span { font-weight: 600; color: #333; }
+  hr {
+    border: none;
+    border-top: 1px solid #ddd;
+    margin: 10px 0;
+  }
+  .diagram-container {
+    margin: 8px 0;
+    border: 1px solid #ddd;
+    background: #fafaf7;
+    padding: 4px;
+    page-break-inside: avoid;
+  }
+  .diagram-container svg {
+    display: block;
+    width: 100%;
+    height: auto;
+  }
+  .diagram-label {
+    font-size: 8.5px;
+    color: #888;
+    text-align: center;
+    margin-top: 2px;
+    font-style: italic;
+  }
+  .two-col {
+    display: flex;
+    gap: 12px;
+  }
+  .two-col > div { flex: 1; }
+  .goals-grid {
+    display: flex;
+    gap: 10px;
+    margin-top: 4px;
+  }
+  .goals-grid .goal-col {
+    flex: 1;
+    border: 1px solid #ddd;
+    padding: 5px 7px;
+    background: #fafaf7;
+  }
+  .goals-grid h4 {
+    font-size: 10px;
+    margin-bottom: 3px;
+    color: #333;
+  }
+  .goals-grid ul {
+    margin: 0;
+    padding-left: 13px;
+  }
+  .goals-grid li {
+    font-size: 9.5px;
+    margin-bottom: 2px;
+    color: #444;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 9.5px;
+    margin-top: 4px;
+  }
+  th, td {
+    border: 1px solid #ccc;
+    padding: 3px 5px;
+    text-align: left;
+  }
+  th {
+    background: #f0f0ec;
+    font-weight: 700;
+    font-size: 9px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+  .total-row td {
+    font-weight: 700;
+    border-top: 2px solid #333;
+  }
+  code {
+    font-family: Menlo, Consolas, monospace;
+    font-size: 9px;
+    background: #f0f0ec;
+    padding: 0 2px;
+  }
+  ul.compact { padding-left: 14px; }
+  ul.compact li { margin-bottom: 1px; font-size: 10px; }
+  .mode-desc { margin-bottom: 3px; }
+  .mode-desc strong { font-size: 10px; }
+  .arch-text { font-size: 10px; margin-bottom: 4px; }
+  .page-break { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<div class="header-block">
+  <h1>ParkPilot: Autonomous Obstacle-Avoidance &amp; Self-Parking RC Car with Cloud Telemetry</h1>
+  <div class="meta">
+    <div><span>EEC172 Final Project Proposal</span></div>
+    <div><span>Team:</span> Aktan Azat, Gezheng Kang</div>
+    <div><span>Date:</span> February 2026</div>
+  </div>
+</div>
+
+<h2>1. Description</h2>
+<p>ParkPilot is an RC car controlled by a CC3200 that avoids obstacles, parallel-parks itself, and sends telemetry to AWS. An IR remote selects between manual drive, autonomous obstacle avoidance, and self-parking. Four ultrasonic sensors provide proximity data rendered as a radar map on a 128x128 OLED, while an Arduino co-processor handles sensor reads and motor actuation over UART.</p>
+<p>AWS IoT is used for telemetry and parking guidance. The device shadow stores sensor distances, mode, and speed. An IoT Rule triggers a Lambda function that generates parking guidance stored in S3. A separate SNS rule emails collision alerts when the BMA222 accelerometer detects impact.</p>
+<p>Existing hobby autonomous cars (Donkey Car, AWS DeepRacer) rely on cameras and ML on powerful compute. ParkPilot uses only ultrasonic ranging on a constrained MCU with classical control algorithms and cloud-assisted guidance.</p>
+
+<h2>2. Design</h2>
+
+<h3>2.1 Functional Specification</h3>
+<p>The system operates in four modes selected by IR remote, with collision detection running in parallel across all active modes.</p>
+
+<div class="diagram-container">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 520" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#555"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c0392b"/>
+    </marker>
+  </defs>
+  <rect width="880" height="520" fill="#fafaf7" rx="6"/>
+  <circle cx="100" cy="120" r="8" fill="#333"/>
+  <circle cx="100" cy="120" r="12" fill="none" stroke="#333" stroke-width="1.5"/>
+  <line x1="112" y1="120" x2="168" y2="120" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <rect x="170" y="84" width="140" height="72" rx="8" fill="#f0f0ec" stroke="#333" stroke-width="2"/>
+  <rect x="170" y="84" width="140" height="24" rx="8" fill="#333"/>
+  <rect x="170" y="100" width="140" height="8" fill="#333"/>
+  <text x="240" y="100" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">IDLE</text>
+  <text x="240" y="130" text-anchor="middle" fill="#444" font-size="10">Display status</text>
+  <text x="240" y="144" text-anchor="middle" fill="#444" font-size="10">No motor output</text>
+  <rect x="440" y="24" width="160" height="72" rx="8" fill="#e8f0e8" stroke="#2d7d2d" stroke-width="2"/>
+  <rect x="440" y="24" width="160" height="24" rx="8" fill="#2d7d2d"/>
+  <rect x="440" y="40" width="160" height="8" fill="#2d7d2d"/>
+  <text x="520" y="40" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">MANUAL</text>
+  <text x="520" y="68" text-anchor="middle" fill="#333" font-size="10">IR directional drive</text>
+  <text x="520" y="82" text-anchor="middle" fill="#333" font-size="10">Live radar on OLED</text>
+  <rect x="440" y="144" width="160" height="72" rx="8" fill="#e8ecf4" stroke="#2d5ba0" stroke-width="2"/>
+  <rect x="440" y="144" width="160" height="24" rx="8" fill="#2d5ba0"/>
+  <rect x="440" y="160" width="160" height="8" fill="#2d5ba0"/>
+  <text x="520" y="160" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">AUTO AVOID</text>
+  <text x="520" y="190" text-anchor="middle" fill="#333" font-size="10">Threshold steering</text>
+  <text x="520" y="204" text-anchor="middle" fill="#333" font-size="10">Reverse if blocked</text>
+  <rect x="170" y="270" width="660" height="220" rx="10" fill="#fdf6e8" stroke="#b8860b" stroke-width="2" stroke-dasharray="6,3"/>
+  <rect x="170" y="270" width="660" height="28" rx="10" fill="#b8860b"/>
+  <rect x="170" y="290" width="660" height="8" fill="#b8860b"/>
+  <text x="500" y="290" text-anchor="middle" fill="#fff" font-size="13" font-weight="600">SELF PARK</text>
+  <rect x="195" y="316" width="100" height="50" rx="6" fill="#fff8e6" stroke="#b8860b" stroke-width="1.5"/>
+  <text x="245" y="337" text-anchor="middle" fill="#444" font-size="9" font-weight="600">SEARCH</text>
+  <text x="245" y="351" text-anchor="middle" fill="#444" font-size="9">GAP</text>
+  <rect x="320" y="316" width="100" height="50" rx="6" fill="#fff8e6" stroke="#b8860b" stroke-width="1.5"/>
+  <text x="370" y="337" text-anchor="middle" fill="#444" font-size="9" font-weight="600">REQUEST</text>
+  <text x="370" y="351" text-anchor="middle" fill="#444" font-size="9">CLOUD</text>
+  <rect x="445" y="316" width="100" height="50" rx="6" fill="#fff8e6" stroke="#b8860b" stroke-width="1.5"/>
+  <text x="495" y="337" text-anchor="middle" fill="#444" font-size="9" font-weight="600">WAIT</text>
+  <text x="495" y="351" text-anchor="middle" fill="#444" font-size="9">GUIDANCE</text>
+  <rect x="195" y="400" width="100" height="50" rx="6" fill="#fff8e6" stroke="#b8860b" stroke-width="1.5"/>
+  <text x="245" y="421" text-anchor="middle" fill="#444" font-size="9" font-weight="600">EXEC 1</text>
+  <text x="245" y="435" text-anchor="middle" fill="#444" font-size="9">Fwd past</text>
+  <rect x="320" y="400" width="100" height="50" rx="6" fill="#fff8e6" stroke="#b8860b" stroke-width="1.5"/>
+  <text x="370" y="421" text-anchor="middle" fill="#444" font-size="9" font-weight="600">EXEC 2</text>
+  <text x="370" y="435" text-anchor="middle" fill="#444" font-size="9">Cut + rev</text>
+  <rect x="445" y="400" width="100" height="50" rx="6" fill="#fff8e6" stroke="#b8860b" stroke-width="1.5"/>
+  <text x="495" y="421" text-anchor="middle" fill="#444" font-size="9" font-weight="600">EXEC 3</text>
+  <text x="495" y="435" text-anchor="middle" fill="#444" font-size="9">Straighten</text>
+  <rect x="600" y="400" width="100" height="50" rx="6" fill="#e8f0e8" stroke="#2d7d2d" stroke-width="1.5"/>
+  <text x="650" y="421" text-anchor="middle" fill="#333" font-size="9" font-weight="600">PARK</text>
+  <text x="650" y="435" text-anchor="middle" fill="#333" font-size="9">DONE</text>
+  <line x1="295" y1="341" x2="318" y2="341" stroke="#b8860b" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <line x1="420" y1="341" x2="443" y2="341" stroke="#b8860b" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M495,366 L495,382 L245,382 L245,398" fill="none" stroke="#b8860b" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <text x="370" y="394" text-anchor="middle" fill="#888" font-size="8">guidance received / timeout</text>
+  <line x1="295" y1="425" x2="318" y2="425" stroke="#b8860b" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <line x1="420" y1="425" x2="443" y2="425" stroke="#b8860b" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <line x1="545" y1="425" x2="598" y2="425" stroke="#b8860b" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <path d="M310,100 L430,60" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="360" y="70" text-anchor="middle" fill="#666" font-size="10">IR btn 1</text>
+  <path d="M310,140 L430,170" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="360" y="164" text-anchor="middle" fill="#666" font-size="10">IR btn 2</text>
+  <path d="M240,156 L240,268" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="250" y="220" fill="#666" font-size="10">IR btn 3</text>
+  <path d="M440,44 Q380,20 310,90" fill="none" stroke="#888" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+  <text x="350" y="38" text-anchor="middle" fill="#888" font-size="9">MUTE</text>
+  <path d="M440,196 Q380,220 310,156" fill="none" stroke="#888" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+  <text x="365" y="198" text-anchor="middle" fill="#888" font-size="9">MUTE</text>
+  <path d="M700,425 Q800,425 800,120 Q800,90 310,108" fill="none" stroke="#888" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+  <text x="810" y="260" fill="#888" font-size="9" transform="rotate(90,810,260)">done</text>
+  <rect x="680" y="124" width="150" height="72" rx="8" fill="#fce8e6" stroke="#c0392b" stroke-width="2"/>
+  <rect x="680" y="124" width="150" height="24" rx="8" fill="#c0392b"/>
+  <rect x="680" y="140" width="150" height="8" fill="#c0392b"/>
+  <text x="755" y="140" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">COLLISION STOP</text>
+  <text x="755" y="168" text-anchor="middle" fill="#444" font-size="10">E-stop + red flash</text>
+  <text x="755" y="182" text-anchor="middle" fill="#444" font-size="10">SNS email alert</text>
+  <path d="M600,56 L690,140" fill="none" stroke="#c0392b" stroke-width="1.5" marker-end="url(#arrow-red)"/>
+  <path d="M600,170 L690,165" fill="none" stroke="#c0392b" stroke-width="1.5" marker-end="url(#arrow-red)"/>
+  <text x="646" y="112" text-anchor="middle" fill="#c0392b" font-size="9">BMA222</text>
+  <text x="646" y="124" text-anchor="middle" fill="#c0392b" font-size="9">impact</text>
+  <path d="M680,160 Q500,240 310,130" fill="none" stroke="#888" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+  <text x="490" y="230" text-anchor="middle" fill="#888" font-size="9">after alert</text>
+</svg>
+<div class="diagram-label">Figure 1: State Machine Diagram</div>
+</div>
+
+<p class="mode-desc"><strong>IDLE</strong> (boot / STOP): Car stationary. OLED shows WiFi status, battery, mode prompt.
+<strong>MANUAL</strong> (IR btn 1): IR remote directional control with speed keys and live radar.
+<strong>AUTO AVOID</strong> (IR btn 2): Forward drive with threshold steering; reverse if all blocked.
+<strong>SELF PARK</strong> (IR btn 3): Wall-follow gap detection, cloud guidance request via Lambda/S3, then multi-stage parallel parking maneuver with local fallback.
+<strong>COLLISION STOP</strong>: BMA222 spike triggers e-stop, red flash, SNS email; returns to IDLE.</p>
+
+<h3>2.2 System Architecture</h3>
+
+<div class="diagram-container">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 560" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#555"/>
+    </marker>
+    <marker id="arr-blue" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2d5ba0"/>
+    </marker>
+    <marker id="arr-grn" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#2d7d2d"/>
+    </marker>
+    <marker id="arr-org" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#b8860b"/>
+    </marker>
+  </defs>
+  <rect width="900" height="560" fill="#fafaf7" rx="6"/>
+  <rect x="280" y="160" width="240" height="200" rx="10" fill="#e8ecf4" stroke="#2d5ba0" stroke-width="2.5"/>
+  <text x="400" y="188" text-anchor="middle" fill="#2d5ba0" font-size="16" font-weight="700">CC3200</text>
+  <line x1="295" y1="198" x2="505" y2="198" stroke="#2d5ba0" stroke-width="1" opacity="0.4"/>
+  <text x="400" y="220" text-anchor="middle" fill="#333" font-size="10">Mode State Machine</text>
+  <text x="400" y="236" text-anchor="middle" fill="#333" font-size="10">Obstacle Avoidance</text>
+  <text x="400" y="252" text-anchor="middle" fill="#333" font-size="10">Parking Logic</text>
+  <text x="400" y="268" text-anchor="middle" fill="#333" font-size="10">OLED Rendering</text>
+  <text x="400" y="284" text-anchor="middle" fill="#333" font-size="10">IR Decoding</text>
+  <text x="400" y="300" text-anchor="middle" fill="#333" font-size="10">WiFi / TLS</text>
+  <text x="400" y="316" text-anchor="middle" fill="#333" font-size="10">Collision Detection</text>
+  <text x="400" y="340" text-anchor="middle" fill="#888" font-size="9">Boots standalone from flash</text>
+  <rect x="280" y="430" width="240" height="110" rx="10" fill="#e8f0e8" stroke="#2d7d2d" stroke-width="2.5"/>
+  <text x="400" y="458" text-anchor="middle" fill="#2d7d2d" font-size="16" font-weight="700">Arduino Uno R3</text>
+  <line x1="295" y1="466" x2="505" y2="466" stroke="#2d7d2d" stroke-width="1" opacity="0.4"/>
+  <text x="400" y="486" text-anchor="middle" fill="#333" font-size="10">4x HC-SR04 Reads (pulseIn)</text>
+  <text x="400" y="502" text-anchor="middle" fill="#333" font-size="10">Servo PWM + L293D Motor</text>
+  <text x="400" y="518" text-anchor="middle" fill="#333" font-size="10">UART Frame Packaging</text>
+  <line x1="380" y1="360" x2="380" y2="428" stroke="#555" stroke-width="2" marker-end="url(#arr)"/>
+  <line x1="420" y1="428" x2="420" y2="360" stroke="#555" stroke-width="2" marker-end="url(#arr)"/>
+  <rect x="340" y="382" width="120" height="30" rx="4" fill="#fff" stroke="#555" stroke-width="1"/>
+  <text x="400" y="395" text-anchor="middle" fill="#555" font-size="10" font-weight="600">UART</text>
+  <text x="400" y="407" text-anchor="middle" fill="#888" font-size="8">$S / $M frames</text>
+  <rect x="40" y="170" width="140" height="70" rx="8" fill="#f4f0fa" stroke="#7b3fa0" stroke-width="2"/>
+  <text x="110" y="198" text-anchor="middle" fill="#7b3fa0" font-size="13" font-weight="600">OLED 128x128</text>
+  <text x="110" y="216" text-anchor="middle" fill="#555" font-size="10">SSD1351 Display</text>
+  <text x="110" y="230" text-anchor="middle" fill="#555" font-size="10">Radar Map + Status</text>
+  <line x1="180" y1="205" x2="278" y2="225" stroke="#7b3fa0" stroke-width="1.8" marker-end="url(#arr)"/>
+  <text x="220" y="206" text-anchor="middle" fill="#7b3fa0" font-size="10" font-weight="600">SPI</text>
+  <rect x="40" y="280" width="140" height="60" rx="8" fill="#fce8e6" stroke="#c0392b" stroke-width="2"/>
+  <text x="110" y="306" text-anchor="middle" fill="#c0392b" font-size="13" font-weight="600">BMA222</text>
+  <text x="110" y="324" text-anchor="middle" fill="#555" font-size="10">Accelerometer</text>
+  <line x1="180" y1="310" x2="278" y2="290" stroke="#c0392b" stroke-width="1.8" marker-end="url(#arr)"/>
+  <text x="220" y="310" text-anchor="middle" fill="#c0392b" font-size="10" font-weight="600">I2C</text>
+  <rect x="40" y="60" width="140" height="60" rx="8" fill="#fff8e6" stroke="#b8860b" stroke-width="2"/>
+  <text x="110" y="86" text-anchor="middle" fill="#b8860b" font-size="13" font-weight="600">IR Receiver</text>
+  <text x="110" y="104" text-anchor="middle" fill="#555" font-size="10">TSOP381xx + Remote</text>
+  <path d="M180,90 Q240,90 280,170" fill="none" stroke="#b8860b" stroke-width="1.8" marker-end="url(#arr-org)"/>
+  <text x="240" y="118" text-anchor="middle" fill="#b8860b" font-size="10" font-weight="600">GPIO IRQ</text>
+  <rect x="40" y="440" width="140" height="90" rx="8" fill="#eef6ee" stroke="#2d7d2d" stroke-width="1.5"/>
+  <text x="110" y="466" text-anchor="middle" fill="#2d7d2d" font-size="12" font-weight="600">HC-SR04 x4</text>
+  <text x="110" y="484" text-anchor="middle" fill="#555" font-size="9">Front / Rear</text>
+  <text x="110" y="498" text-anchor="middle" fill="#555" font-size="9">Left / Right</text>
+  <text x="110" y="516" text-anchor="middle" fill="#888" font-size="9">Ultrasonic Ranging</text>
+  <line x1="180" y1="485" x2="278" y2="485" stroke="#2d7d2d" stroke-width="1.8" marker-end="url(#arr-grn)"/>
+  <text x="228" y="478" text-anchor="middle" fill="#2d7d2d" font-size="10" font-weight="600">GPIO</text>
+  <rect x="620" y="420" width="140" height="60" rx="8" fill="#eef6ee" stroke="#2d7d2d" stroke-width="1.5"/>
+  <text x="690" y="446" text-anchor="middle" fill="#2d7d2d" font-size="12" font-weight="600">DC Motors x2</text>
+  <text x="690" y="462" text-anchor="middle" fill="#555" font-size="10">via L293D Driver</text>
+  <rect x="620" y="494" width="140" height="46" rx="8" fill="#eef6ee" stroke="#2d7d2d" stroke-width="1.5"/>
+  <text x="690" y="520" text-anchor="middle" fill="#2d7d2d" font-size="12" font-weight="600">Steering Servo</text>
+  <line x1="520" y1="480" x2="618" y2="450" stroke="#2d7d2d" stroke-width="1.8" marker-end="url(#arr-grn)"/>
+  <text x="572" y="456" text-anchor="middle" fill="#2d7d2d" font-size="10" font-weight="600">PWM</text>
+  <line x1="520" y1="505" x2="618" y2="515" stroke="#2d7d2d" stroke-width="1.8" marker-end="url(#arr-grn)"/>
+  <text x="572" y="502" text-anchor="middle" fill="#2d7d2d" font-size="10" font-weight="600">PWM</text>
+  <rect x="790" y="445" width="90" height="46" rx="8" fill="#fce8e6" stroke="#c0392b" stroke-width="1.5"/>
+  <text x="835" y="472" text-anchor="middle" fill="#c0392b" font-size="11" font-weight="600">Buzzer</text>
+  <line x1="760" y1="450" x2="788" y2="462" stroke="#c0392b" stroke-width="1.2" marker-end="url(#arr)"/>
+  <rect x="580" y="30" width="290" height="310" rx="12" fill="#eef2f8" stroke="#2d5ba0" stroke-width="2" stroke-dasharray="8,4"/>
+  <text x="725" y="56" text-anchor="middle" fill="#2d5ba0" font-size="14" font-weight="700">AWS Cloud</text>
+  <line x1="596" y1="66" x2="854" y2="66" stroke="#2d5ba0" stroke-width="1" opacity="0.3"/>
+  <rect x="610" y="80" width="230" height="50" rx="6" fill="#dce6f4" stroke="#2d5ba0" stroke-width="1.5"/>
+  <text x="725" y="102" text-anchor="middle" fill="#2d5ba0" font-size="12" font-weight="600">AWS IoT Core</text>
+  <text x="725" y="118" text-anchor="middle" fill="#555" font-size="9">Device Shadow + Rules Engine</text>
+  <rect x="610" y="148" width="110" height="46" rx="6" fill="#fff3e0" stroke="#e67e22" stroke-width="1.5"/>
+  <text x="665" y="170" text-anchor="middle" fill="#e67e22" font-size="11" font-weight="600">Lambda</text>
+  <text x="665" y="184" text-anchor="middle" fill="#555" font-size="9">Park guidance</text>
+  <rect x="736" y="148" width="110" height="46" rx="6" fill="#e8f5e9" stroke="#388e3c" stroke-width="1.5"/>
+  <text x="791" y="170" text-anchor="middle" fill="#388e3c" font-size="11" font-weight="600">S3</text>
+  <text x="791" y="184" text-anchor="middle" fill="#555" font-size="9">Guidance JSON</text>
+  <rect x="610" y="210" width="110" height="46" rx="6" fill="#fce4ec" stroke="#c62828" stroke-width="1.5"/>
+  <text x="665" y="232" text-anchor="middle" fill="#c62828" font-size="11" font-weight="600">SNS</text>
+  <text x="665" y="246" text-anchor="middle" fill="#555" font-size="9">Collision email</text>
+  <line x1="665" y1="130" x2="665" y2="146" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+  <path d="M660,130 L660,138 L660,208" fill="none" stroke="#555" stroke-width="1" stroke-dasharray="3,2"/>
+  <line x1="720" y1="171" x2="734" y2="171" stroke="#555" stroke-width="1.2" marker-end="url(#arr)"/>
+  <path d="M520,200 Q560,120 608,105" fill="none" stroke="#2d5ba0" stroke-width="2" marker-end="url(#arr-blue)"/>
+  <rect x="538" y="128" width="64" height="28" rx="4" fill="#fff" stroke="#2d5ba0" stroke-width="1"/>
+  <text x="570" y="140" text-anchor="middle" fill="#2d5ba0" font-size="9" font-weight="600">WiFi</text>
+  <text x="570" y="151" text-anchor="middle" fill="#888" font-size="8">HTTPS/TLS</text>
+  <path d="M791,194 Q791,300 520,280" fill="none" stroke="#388e3c" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arr)"/>
+  <text x="680" y="280" text-anchor="middle" fill="#388e3c" font-size="8">presigned GET</text>
+  <rect x="700" y="300" width="150" height="34" rx="6" fill="#f5f5f0" stroke="#888" stroke-width="1"/>
+  <text x="775" y="322" text-anchor="middle" fill="#888" font-size="10">7.4V LiPo (motors) + 9V (logic)</text>
+  <rect x="20" y="388" width="180" height="32" rx="4" fill="#f5f5f0" stroke="#ccc" stroke-width="1"/>
+  <line x1="30" y1="404" x2="55" y2="404" stroke="#555" stroke-width="2"/>
+  <text x="62" y="408" fill="#555" font-size="9">Wired bus</text>
+  <line x1="105" y1="404" x2="130" y2="404" stroke="#555" stroke-width="1.5" stroke-dasharray="4,3"/>
+  <text x="137" y="408" fill="#555" font-size="9">Wireless</text>
+</svg>
+<div class="diagram-label">Figure 2: System Architecture Block Diagram</div>
+</div>
+
+<p class="arch-text"><strong>CC3200 (main MCU):</strong> Runs mode management, obstacle avoidance, parking state machine, SPI OLED rendering, I2C BMA222 collision monitoring, WiFi/HTTPS telemetry to AWS IoT, and UART command/sensor exchange with Arduino.</p>
+<p class="arch-text"><strong>Arduino (co-processor):</strong> Reads 4x HC-SR04 ultrasonics at ~20 Hz, packages UART sensor frames (<code>$S,&lt;front&gt;,&lt;rear&gt;,&lt;left&gt;,&lt;right&gt;\n</code>), receives motor commands (<code>$M,&lt;speed_pct&gt;,&lt;steer_angle&gt;\n</code>), and generates PWM for servo and L293D.</p>
+<p class="arch-text"><strong>Protocols:</strong> SPI (OLED), I2C (BMA222), UART (Arduino), GPIO IRQ (IR receiver), HTTPS/REST (AWS). <strong>Sensors:</strong> HC-SR04 x4 (proximity), TSOP381xx (IR remote), BMA222 (collision).</p>
+
+<h2>3. Implementation Goals</h2>
+<div class="goals-grid">
+  <div class="goal-col">
+    <h4>Minimal</h4>
+    <ul>
+      <li>Car assembly with motors, battery, Arduino</li>
+      <li>Ultrasonic UART transmission</li>
+      <li>CC3200 UART parsing + OLED display</li>
+      <li>IR mode switching + manual drive</li>
+      <li>Autonomous obstacle avoidance</li>
+      <li>AWS shadow telemetry</li>
+      <li>Standalone boot from flash</li>
+    </ul>
+  </div>
+  <div class="goal-col">
+    <h4>Target</h4>
+    <ul>
+      <li>Real-time top-down OLED radar map</li>
+      <li>BMA222 collision-triggered SNS alert</li>
+      <li>All three modes switchable by IR</li>
+      <li>Self-parking with Lambda guidance</li>
+      <li>Two-minute live demo sequence</li>
+      <li>Clean wiring and packaging</li>
+    </ul>
+  </div>
+  <div class="goal-col">
+    <h4>Stretch</h4>
+    <ul>
+      <li>Lambda parking arc trajectory + S3 image</li>
+      <li>OLED overlay of fetched guidance image</li>
+      <li>Speed-proportional avoidance</li>
+      <li>Buffered telemetry replay after reconnect</li>
+    </ul>
+  </div>
+</div>
+
+<div class="page-break"></div>
+
+<h2>4. Bill of Materials</h2>
+<table>
+  <thead>
+    <tr><th>Item</th><th>Qty</th><th>Source</th><th>Cost</th></tr>
+  </thead>
+  <tbody>
+    <tr><td>CC3200 LaunchPad</td><td>1</td><td>Lab kit</td><td>$0</td></tr>
+    <tr><td>Adafruit OLED 1.5" (SSD1351)</td><td>1</td><td>Lab kit</td><td>$0</td></tr>
+    <tr><td>AT&amp;T S10-S3 IR Remote</td><td>1</td><td>Lab kit</td><td>$0</td></tr>
+    <tr><td>TSOP381xx IR Receiver</td><td>1</td><td>Lab kit</td><td>$0</td></tr>
+    <tr><td>100 Ohm Resistor</td><td>1</td><td>Lab kit</td><td>$0</td></tr>
+    <tr><td>100 uF Capacitor</td><td>1</td><td>Lab kit</td><td>$0</td></tr>
+    <tr><td>Arduino Uno R3</td><td>1</td><td>Arduino kit</td><td>$0</td></tr>
+    <tr><td>HC-SR04 Ultrasonic Sensor</td><td>1</td><td>Arduino kit</td><td>$0</td></tr>
+    <tr><td>HC-SR04 Ultrasonic Sensor</td><td>3</td><td>Amazon</td><td>~$6</td></tr>
+    <tr><td>L293D Motor Driver IC</td><td>1</td><td>Arduino kit</td><td>$0</td></tr>
+    <tr><td>Servo Motor</td><td>1</td><td>Arduino kit</td><td>$0</td></tr>
+    <tr><td>Active Buzzer</td><td>1</td><td>Arduino kit</td><td>$0</td></tr>
+    <tr><td>830-point Breadboard</td><td>1</td><td>Arduino kit</td><td>$0</td></tr>
+    <tr><td>9V Battery + Snap Connector</td><td>1</td><td>Arduino kit</td><td>$0</td></tr>
+    <tr><td>RC Car Chassis + DC Motors</td><td>1</td><td>Amazon</td><td>~$12</td></tr>
+    <tr><td>7.4V Li-Po Battery (drive power)</td><td>1</td><td>Amazon</td><td>~$8</td></tr>
+    <tr><td>Jumper wires (M-M, M-F)</td><td>~30</td><td>Arduino kit</td><td>$0</td></tr>
+    <tr><td>Zip ties + double-sided tape</td><td>1 pack</td><td>Hardware store</td><td>~$3</td></tr>
+    <tr class="total-row"><td>Total</td><td></td><td></td><td>~$29</td></tr>
+  </tbody>
+</table>
+
+</body>
+</html>

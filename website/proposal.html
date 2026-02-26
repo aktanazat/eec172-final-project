@@ -80,6 +80,10 @@
         <h2>2. Design</h2>
 
         <h3>2.1 Functional Specification</h3>
+        <p class="diagram-intro">The system operates in four modes selected by IR remote, with collision detection running in parallel across all active modes.</p>
+        <div class="diagram-wrap">
+          <img src="diagrams/state-machine.svg" alt="State machine diagram showing IDLE, MANUAL, AUTO AVOID, SELF PARK, and COLLISION STOP modes with transitions" />
+        </div>
         <div class="mode-grid">
           <article class="card">
             <h4>IDLE</h4>
@@ -117,6 +121,9 @@
         </div>
 
         <h3>2.2 System Architecture</h3>
+        <div class="diagram-wrap">
+          <img src="diagrams/architecture.svg" alt="System architecture block diagram showing CC3200, Arduino, sensors, actuators, and AWS cloud services with communication protocols" />
+        </div>
         <div class="arch-grid">
           <article class="card">
             <h4>CC3200 Main MCU</h4>

@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 520" font-family="Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#555"/>
+    </marker>
+    <marker id="arrow-red" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#c0392b"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect width="880" height="520" fill="#fafaf7" rx="6"/>
+
+  <!-- BOOT start -->
+  <circle cx="100" cy="120" r="8" fill="#333"/>
+  <circle cx="100" cy="120" r="12" fill="none" stroke="#333" stroke-width="1.5"/>
+
+  <!-- Arrow from BOOT to IDLE -->
+  <line x1="112" y1="120" x2="168" y2="120" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+
+  <!-- IDLE state -->
+  <rect x="170" y="84" width="140" height="72" rx="8" fill="#f0f0ec" stroke="#333" stroke-width="2"/>
+  <rect x="170" y="84" width="140" height="24" rx="8" fill="#333"/>
+  <rect x="170" y="100" width="140" height="8" fill="#333"/>
+  <text x="240" y="100" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">IDLE</text>
+  <text x="240" y="130" text-anchor="middle" fill="#444" font-size="10">Display status</text>
+  <text x="240" y="144" text-anchor="middle" fill="#444" font-size="10">No motor output</text>
+
+  <!-- MANUAL state -->
+  <rect x="440" y="24" width="160" height="72" rx="8" fill="#e8f0e8" stroke="#2d7d2d" stroke-width="2"/>
+  <rect x="440" y="24" width="160" height="24" rx="8" fill="#2d7d2d"/>
+  <rect x="440" y="40" width="160" height="8" fill="#2d7d2d"/>
+  <text x="520" y="40" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">MANUAL</text>
+  <text x="520" y="68" text-anchor="middle" fill="#333" font-size="10">IR directional drive</text>
+  <text x="520" y="82" text-anchor="middle" fill="#333" font-size="10">Live radar on OLED</text>
+
+  <!-- AUTO AVOID state -->
+  <rect x="440" y="144" width="160" height="72" rx="8" fill="#e8ecf4" stroke="#2d5ba0" stroke-width="2"/>
+  <rect x="440" y="144" width="160" height="24" rx="8" fill="#2d5ba0"/>
+  <rect x="440" y="160" width="160" height="8" fill="#2d5ba0"/>
+  <text x="520" y="160" text-anchor="middle" fill="#fff" font-size="12" font-weight="600">AUTO AVOID</text>
+  <text x="520" y="190" text-anchor="middle" fill="#333" font-size="10">Threshold steering</text>
+  <text x="520" y="204" text-anchor="middle" fill="#333" font-size="10">Reverse if blocked</text>
+
+  <!-- SELF PARK state (large, contains sub-states) -->
+  <rect x="170" y="270" width="660" height="220" rx="10" fill="#fdf6e8" stroke="#b8860b" stroke-width="2" stroke-dasharray="6,3"/>
+  <rect x="170" y="270" width="660" height="28" rx="10" fill="#b8860b"/>
+  <rect x="170" y="290" width="660" height="8" fill="#b8860b"/>
+  <text x="500" y="290" text-anchor="middle" fill="#fff" font-size="13" font-weight="600">SELF PARK</text>
+
+  <!-- Sub-states inside SELF PARK -->
+  <rect x="195" y="316" width="100" height="50" rx="6" fill="#fff8e6" stroke="#b8860b" stroke-width="1.5"/>
+  <text x="245" y="337" text-anchor="middle" fill="#444" font-size="9" font-weight="600">SEARCH</text>
+  <text x="245" y="351" text-anchor="middle" fill="#444" font-size="9">GAP</text>
+
+  <rect x="320" y="316" width="100" height="50" rx="6" fill="#fff8e6" stroke="#b8860b" stroke-width="1.5"/>
+  <text x="370" y="337" text-anchor="middle" fill="#444" font-size="9" font-weight="600">REQUEST</text>
+  <text x="370" y="351" text-anchor="middle" fill="#444" font-size="9">CLOUD</text>
+
+  <rect x="445" y="316" width="100" height="50" rx="6" fill="#fff8e6" stroke="#b8860b" stroke-width="1.5"/>
+  <text x="495" y="337" text-anchor="middle" fill="#444" font-size="9" font-weight="600">WAIT</text>
+  <text x="495" y="351" text-anchor="middle" fill="#444" font-size="9">GUIDANCE</text>
+
+  <rect x="195" y="400" width="100" height="50" rx="6" fill="#fff8e6" stroke="#b8860b" stroke-width="1.5"/>
+  <text x="245" y="421" text-anchor="middle" fill="#444" font-size="9" font-weight="600">EXEC 1</text>
+  <text x="245" y="435" text-anchor="middle" fill="#444" font-size="9">Fwd past</text>
+
+  <rect x="320" y="400" width="100" height="50" rx="6" fill="#fff8e6" stroke="#b8860b" stroke-width="1.5"/>
+  <text x="370" y="421" text-anchor="middle" fill="#444" font-size="9" font-weight="600">EXEC 2</text>
+  <text x="370" y="435" text-anchor="middle" fill="#444" font-size="9">Cut + rev</text>
+
+  <rect x="445" y="400" width="100" height="50" rx="6" fill="#fff8e6" stroke="#b8860b" stroke-width="1.5"/>
+  <text x="495" y="421" text-anchor="middle" fill="#444" font-size="9" font-weight="600">EXEC 3</text>
+  <text x="495" y="435" text-anchor="middle" fill="#444" font-size="9">Straighten</text>
+
+  <rect x="600" y="400" width="100" height="50" rx="6" fill="#e8f0e8" stroke="#2d7d2d" stroke-width="1.5"/>
+  <text x="650" y="421" text-anchor="middle" fill="#333" font-size="9" font-weight="600">PARK</text>
+  <text x="650" y="435" text-anchor="middle" fill="#333" font-size="9">DONE</text>
+
+  <!-- Sub-state arrows -->
+  <line x1="295" y1="341" x2="318" y2="341" stroke="#b8860b" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <line x1="420" y1="341" x2="443" y2="341" stroke="#b8860b" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <!-- WAIT -> EXEC1 (down-left) -->
+  <path d="M495,366 L495,382 L245,382 L245,398" fill="none" stroke="#b8860b" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <text x="370" y="394" text-anchor="middle" fill="#888" font-size="8">guidance received / timeout</text>
+  <line x1="295" y1="425" x2="318" y2="425" stroke="#b8860b" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <line x1="420" y1="425" x2="443" y2="425" stroke="#b8860b" stroke-width="1.2" marker-end="url(#arrow)"/>
+  <line x1="545" y1="425" x2="598" y2="425" stroke="#b8860b" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+  <!-- IDLE -> MANUAL -->
+  <path d="M310,100 L430,60" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="360" y="70" text-anchor="middle" fill="#666" font-size="10">IR btn 1</text>
+
+  <!-- IDLE -> AUTO AVOID -->
+  <path d="M310,140 L430,170" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="360" y="164" text-anchor="middle" fill="#666" font-size="10">IR btn 2</text>
+
+  <!-- IDLE -> SELF PARK -->
+  <path d="M240,156 L240,268" fill="none" stroke="#555" stroke-width="1.5" marker-end="url(#arrow)"/>
+  <text x="250" y="220" fill="#666" font-size="10">IR btn 3</text>
+
+  <!-- MANUAL -> IDLE (return) -->
+  <path d="M440,44 Q380,20 310,90" fill="none" stroke="#888" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+  <text x="350" y="38" text-anchor="middle" fill="#888" font-size="9">MUTE</text>
+
+  <!-- AUTO AVOID -> IDLE (return) -->
+  <path d="M440,196 Q380,220 310,156" fill="none" stroke="#888" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+  <text x="365" y="198" text-anchor="middle" fill="#888" font-size="9">MUTE</text>
+
+  <!-- PARK DONE -> IDLE -->
+  <path d="M700,425 Q800,425 800,120 Q800,90 310,108" fill="none" stroke="#888" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+  <text x="810" y="260" fill="#888" font-size="9" transform="rotate(90,810,260)">done</text>
+
+  <!-- COLLISION STOP state -->
+  <rect x="680" y="124" width="150" height="72" rx="8" fill="#fce8e6" stroke="#c0392b" stroke-width="2"/>
+  <rect x="680" y="124" width="150" height="24" rx="8" fill="#c0392b"/>
+  <rect x="680" y="140" width="150" height="8" fill="#c0392b"/>
+  <text x="755" y="140" text-anchor="middle" fill="#fff" font-size="11" font-weight="600">COLLISION STOP</text>
+  <text x="755" y="168" text-anchor="middle" fill="#444" font-size="10">E-stop + red flash</text>
+  <text x="755" y="182" text-anchor="middle" fill="#444" font-size="10">SNS email alert</text>
+
+  <!-- Any active -> COLLISION (from MANUAL) -->
+  <path d="M600,56 L690,140" fill="none" stroke="#c0392b" stroke-width="1.5" marker-end="url(#arrow-red)"/>
+  <!-- Any active -> COLLISION (from AVOID) -->
+  <path d="M600,170 L690,165" fill="none" stroke="#c0392b" stroke-width="1.5" marker-end="url(#arrow-red)"/>
+
+  <text x="646" y="112" text-anchor="middle" fill="#c0392b" font-size="9">BMA222</text>
+  <text x="646" y="124" text-anchor="middle" fill="#c0392b" font-size="9">impact</text>
+
+  <!-- COLLISION -> IDLE -->
+  <path d="M680,160 Q500,240 310,130" fill="none" stroke="#888" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+  <text x="490" y="230" text-anchor="middle" fill="#888" font-size="9">after alert</text>
+</svg>

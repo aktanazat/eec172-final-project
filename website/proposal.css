@@ -237,6 +237,30 @@ tbody td {
   line-height: 1.42;
 }
 
+.diagram-intro {
+  margin-top: 0.65rem;
+  color: var(--paper-muted);
+  font-size: 0.9rem;
+  line-height: 1.42;
+}
+
+.diagram-wrap {
+  margin-top: 0.68rem;
+  border: 1px solid var(--edge-paper);
+  background: #fafaf7;
+  padding: 0.5rem;
+  box-shadow: var(--shadow-paper);
+  overflow-x: auto;
+}
+
+.diagram-wrap img {
+  display: block;
+  width: 100%;
+  max-width: 880px;
+  height: auto;
+  margin: 0 auto;
+}
+
 .comparison-card {
   margin-top: 0.72rem;
   border: 1px solid var(--edge-paper);
