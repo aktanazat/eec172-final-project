@@ -142,11 +142,11 @@ const LIVE_THING = "akge_cc3200_board";
 const LOCAL_LEADERBOARD = "live/leaderboard-latest.json";
 const LOCAL_REPLAY = "live/replay-latest.json";
 const refreshButton = document.getElementById("refresh-cloud-data");
-const leaderboardPaths = [
+const liveLeaderboardPaths = [
   `https://${LIVE_BUCKET}.s3.us-east-2.amazonaws.com/leaderboard/${LIVE_THING}/latest.json`,
   `https://${LIVE_BUCKET}.s3.amazonaws.com/leaderboard/${LIVE_THING}/latest.json`,
-  LOCAL_LEADERBOARD,
 ];
+const snapshotLeaderboardPaths = [LOCAL_LEADERBOARD];
 
 function formatTimestamp(unixSeconds) {
   if (!unixSeconds) return "--";
@@ -268,12 +268,20 @@ async function hydrateLiveCloudPanel(forceRefresh = false) {
   if (refreshButton) refreshButton.disabled = true;
 
   try {
-    const { data, url } = await fetchJsonWithFallback(leaderboardPaths, forceRefresh);
+    let result;
+
+    try {
+      result = await fetchJsonWithFallback(liveLeaderboardPaths, forceRefresh);
+    } catch (liveError) {
+      result = await fetchJsonWithFallback(snapshotLeaderboardPaths, forceRefresh);
+    }
+
+    const { data, url } = result;
     renderLiveLeaderboard(data, url);
     statusNode.textContent =
       url === LOCAL_LEADERBOARD
-        ? "Loaded from the bundled snapshot because live S3 was unavailable"
-        : `Live data loaded from ${url}`;
+        ? `Loaded bundled snapshot from ${formatTimestamp(data.updated_at)} because live S3 was unavailable`
+        : `Live data loaded from S3 at ${formatTimestamp(data.updated_at)}`;
   } catch (error) {
     statusNode.textContent = `Live data unavailable in browser: ${error.message}`;
   } finally {
