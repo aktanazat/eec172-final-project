@@ -1,9 +1,8 @@
 
-// Standard includes
+
 #include <string.h>
 #include <stdio.h>
 
-// Driverlib includes
 #include "hw_types.h"
 #include "hw_memmap.h"
 #include "hw_common_reg.h"
@@ -17,36 +16,33 @@
 #include "uart.h"
 #include "interrupt.h"
 
-// Common interface includes
 #include "uart_if.h"
 #include "pinmux.h"
 
 #include "Adafruit_SSD1351.h"
-
-// Adafruit libraries
 #include "Adafruit_GFX.h"
 #include "glcdfont.h"
 
-//*****************************************************************************
+#define OLED_DC_PIN           GPIO_PIN_6
+#define OLED_RST_PIN          GPIO_PIN_4
 
 void writeCommand(unsigned char c) {
   unsigned long ulDummy;
 
   MAP_SPICSEnable(GSPI_BASE);
-  GPIOPinWrite(GPIOA3_BASE, 0x40, 0x00);  // DC low
+  GPIOPinWrite(GPIOA3_BASE, OLED_DC_PIN, 0x00);  // DC low
 
   MAP_SPIDataPut(GSPI_BASE, c);
   MAP_SPIDataGet(GSPI_BASE, &ulDummy);
 
   MAP_SPICSDisable(GSPI_BASE);
 }
-//*****************************************************************************
 
 void writeData(unsigned char c) {
     unsigned long ulDummy;
 
     MAP_SPICSEnable(GSPI_BASE);
-    GPIOPinWrite(GPIOA3_BASE, 0x40, 0x40);  // DC high
+    GPIOPinWrite(GPIOA3_BASE, OLED_DC_PIN, OLED_DC_PIN);  // DC high
 
     MAP_SPIDataPut(GSPI_BASE, c);
     MAP_SPIDataGet(GSPI_BASE, &ulDummy);
@@ -54,24 +50,14 @@ void writeData(unsigned char c) {
     MAP_SPICSDisable(GSPI_BASE);
 }
 
-//*****************************************************************************
 void Adafruit_Init(void){
-
-//TODO 3
-/* NOTE: This function assumes that the RESET pin of the 
-*  OLED has been wired to GPIO28, pin 18 (P2.2). If you 
-*  use a different pin for the OLED reset, then you should
-*  update the GPIOPinWrite commands below that set RESET 
-*  high or low.
-*/
-
   volatile unsigned long delay;
 
-  GPIOPinWrite(GPIOA3_BASE, 0x10, 0);	// RESET = RESET_LOW
+  GPIOPinWrite(GPIOA3_BASE, OLED_RST_PIN, 0);	// RESET = RESET_LOW
 
   for(delay=0; delay<100; delay=delay+1);// delay minimum 100 ns
 
-  GPIOPinWrite(GPIOA3_BASE, 0x10, 0x10);	// RESET = RESET_HIGH
+  GPIOPinWrite(GPIOA3_BASE, OLED_RST_PIN, OLED_RST_PIN);	// RESET = RESET_HIGH
 
 	// Initialization Sequence
   writeCommand(SSD1351_CMD_COMMANDLOCK);  // set command lock
@@ -79,10 +65,10 @@ void Adafruit_Init(void){
   writeCommand(SSD1351_CMD_COMMANDLOCK);  // set command lock
   writeData(0xB1);
 
-  writeCommand(SSD1351_CMD_DISPLAYOFF);  		// 0xAE
+  writeCommand(SSD1351_CMD_DISPLAYOFF);
 
-  writeCommand(SSD1351_CMD_CLOCKDIV);  		// 0xB3
-  writeData(0xF1);  						// 7:4 = Oscillator Frequency, 3:0 = CLK Div Ratio (A[3:0]+1 = 1..16)
+  writeCommand(SSD1351_CMD_CLOCKDIV);
+  writeData(0xF1);
 
   writeCommand(SSD1351_CMD_MUXRATIO);
   writeData(127);
@@ -97,7 +83,7 @@ void Adafruit_Init(void){
   writeData(0x00);
   writeData(0x7F);
 
-  writeCommand(SSD1351_CMD_STARTLINE); 		// 0xA1
+  writeCommand(SSD1351_CMD_STARTLINE);
   if (SSD1351HEIGHT == 96) {
     writeData(96);
   } else {
@@ -105,36 +91,32 @@ void Adafruit_Init(void){
   }
 
 
-  writeCommand(SSD1351_CMD_DISPLAYOFFSET); 	// 0xA2
+  writeCommand(SSD1351_CMD_DISPLAYOFFSET);
   writeData(0x0);
 
   writeCommand(SSD1351_CMD_SETGPIO);
   writeData(0x00);
 
   writeCommand(SSD1351_CMD_FUNCTIONSELECT);
-  writeData(0x01); // internal (diode drop)
-  //writeData(0x01); // external bias
+  writeData(0x01);
 
-//    writeCommand(SSSD1351_CMD_SETPHASELENGTH);
-//    writeData(0x32);
-
-  writeCommand(SSD1351_CMD_PRECHARGE);  		// 0xB1
+  writeCommand(SSD1351_CMD_PRECHARGE);
   writeData(0x32);
 
-  writeCommand(SSD1351_CMD_VCOMH);  			// 0xBE
+  writeCommand(SSD1351_CMD_VCOMH);
   writeData(0x05);
 
-  writeCommand(SSD1351_CMD_NORMALDISPLAY);  	// 0xA6
+  writeCommand(SSD1351_CMD_NORMALDISPLAY);
 
   writeCommand(SSD1351_CMD_CONTRASTABC);
-  writeData(0xC8);
-  writeData(0x80);
-  writeData(0xC8);
+  writeData(0xFF);
+  writeData(0xFF);
+  writeData(0xFF);
 
   writeCommand(SSD1351_CMD_CONTRASTMASTER);
   writeData(0x0F);
 
-  writeCommand(SSD1351_CMD_SETVSL );
+  writeCommand(SSD1351_CMD_SETVSL);
   writeData(0xA0);
   writeData(0xB5);
   writeData(0x55);
@@ -142,10 +124,8 @@ void Adafruit_Init(void){
   writeCommand(SSD1351_CMD_PRECHARGE2);
   writeData(0x01);
 
-  writeCommand(SSD1351_CMD_DISPLAYON);		//--turn on oled panel
+  writeCommand(SSD1351_CMD_DISPLAYON);
 }
-
-/***********************************/
 
 void goTo(int x, int y) {
   if ((x >= SSD1351WIDTH) || (y >= SSD1351HEIGHT)) return;
@@ -177,39 +157,29 @@ void fillScreen(unsigned int fillcolor) {
   fillRect(0, 0, SSD1351WIDTH, SSD1351HEIGHT, fillcolor);
 }
 
-/**************************************************************************/
-/*!
-    @brief  Draws a filled rectangle using HW acceleration
-*/
-/**************************************************************************/
 void fillRect(unsigned int x, unsigned int y, unsigned int w, unsigned int h, unsigned int fillcolor)
 {
   unsigned int i;
 
-  // Bounds check
   if ((x >= SSD1351WIDTH) || (y >= SSD1351HEIGHT))
 	return;
 
-  // Y bounds check
   if (y+h > SSD1351HEIGHT)
   {
     h = SSD1351HEIGHT - y - 1;
   }
 
-  // X bounds check
   if (x+w > SSD1351WIDTH)
   {
     w = SSD1351WIDTH - x - 1;
   }
 
-  // set location
   writeCommand(SSD1351_CMD_SETCOLUMN);
   writeData(x);
   writeData(x+w-1);
   writeCommand(SSD1351_CMD_SETROW);
   writeData(y);
   writeData(y+h-1);
-  // fill!
   writeCommand(SSD1351_CMD_WRITERAM);
 
   for (i=0; i < w*h; i++) {
@@ -219,13 +189,11 @@ void fillRect(unsigned int x, unsigned int y, unsigned int w, unsigned int h, un
 }
 
 void drawFastVLine(int x, int y, int h, unsigned int color) {
-
   unsigned int i;
-  // Bounds check
+
   if ((x >= SSD1351WIDTH) || (y >= SSD1351HEIGHT))
 	return;
 
-  // X bounds check
   if (y+h > SSD1351HEIGHT)
   {
     h = SSD1351HEIGHT - y - 1;
@@ -233,14 +201,12 @@ void drawFastVLine(int x, int y, int h, unsigned int color) {
 
   if (h < 0) return;
 
-  // set location
   writeCommand(SSD1351_CMD_SETCOLUMN);
   writeData(x);
   writeData(x);
   writeCommand(SSD1351_CMD_SETROW);
   writeData(y);
   writeData(y+h-1);
-  // fill!
   writeCommand(SSD1351_CMD_WRITERAM);
 
   for (i=0; i < h; i++) {
@@ -252,13 +218,11 @@ void drawFastVLine(int x, int y, int h, unsigned int color) {
 
 
 void drawFastHLine(int x, int y, int w, unsigned int color) {
-
   unsigned int i;
-  // Bounds check
+
   if ((x >= SSD1351WIDTH) || (y >= SSD1351HEIGHT))
 	return;
 
-  // X bounds check
   if (x+w > SSD1351WIDTH)
   {
     w = SSD1351WIDTH - x - 1;
@@ -266,14 +230,12 @@ void drawFastHLine(int x, int y, int w, unsigned int color) {
 
   if (w < 0) return;
 
-  // set location
   writeCommand(SSD1351_CMD_SETCOLUMN);
   writeData(x);
   writeData(x+w-1);
   writeCommand(SSD1351_CMD_SETROW);
   writeData(y);
   writeData(y);
-  // fill!
   writeCommand(SSD1351_CMD_WRITERAM);
 
   for (i=0; i < w; i++) {
