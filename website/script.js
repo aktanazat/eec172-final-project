@@ -153,6 +153,10 @@ function formatTimestamp(unixSeconds) {
   return new Date(unixSeconds * 1000).toLocaleString();
 }
 
+function safeScore(value) {
+  return Math.max(0, Number(value) || 0);
+}
+
 function replayUrlFromKey(key, preferLocal) {
   if (key) return `https://${LIVE_BUCKET}.s3.us-east-2.amazonaws.com/${key}`;
   if (preferLocal) return new URL(LOCAL_REPLAY, window.location.href).toString();
@@ -217,14 +221,14 @@ function renderLiveLeaderboard(payload, sourceUrl) {
 
   setText("live-winner", latest.winner === "DEFENDER" ? "DEF" : "ATK");
   setText("live-mission", `M${latest.mission_level ?? "--"}`);
-  setText("hero-defender-score", String(latest.defender_adjusted ?? 0).padStart(4, "0"));
-  setText("hero-attacker-score", String(latest.attacker_adjusted ?? 0).padStart(4, "0"));
+  setText("hero-defender-score", String(safeScore(latest.defender_adjusted)).padStart(4, "0"));
+  setText("hero-attacker-score", String(safeScore(latest.attacker_adjusted)).padStart(4, "0"));
 
   if (roundMeta) {
     roundMeta.innerHTML = `
       <li>Updated: ${formatTimestamp(payload.updated_at)}</li>
       <li>Run: ${formatTimestamp(latest.timestamp)}</li>
-      <li>Score: DEF ${latest.defender_adjusted} / ATK ${latest.attacker_adjusted}</li>
+      <li>Score: DEF ${safeScore(latest.defender_adjusted)} / ATK ${safeScore(latest.attacker_adjusted)}</li>
     `;
   }
 
@@ -248,7 +252,7 @@ function renderLiveLeaderboard(payload, sourceUrl) {
           <div class="leaderboard-row">
             <span>${new Date(run.timestamp * 1000).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
             <span>${run.winner === "DEFENDER" ? "DEF" : "ATK"}</span>
-            <span>${run.defender_adjusted}-${run.attacker_adjusted}</span>
+            <span>DEF ${safeScore(run.defender_adjusted)} / ATK ${safeScore(run.attacker_adjusted)}</span>
           </div>
         `
       )
