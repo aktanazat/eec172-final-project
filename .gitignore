@@ -29,6 +29,9 @@ lambda/__pycache__/
 __pycache__/
 *.pyc
 
+# Presentation build artifacts
+presentation/*.jpg
+
 # IDE
 .vscode/
 .claude/
