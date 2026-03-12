@@ -139,10 +139,12 @@ if (!prefersReducedMotion && "IntersectionObserver" in window) {
 
 const LIVE_BUCKET = "parkpilot-guidance-658947468902";
 const LIVE_THING = "akge_cc3200_board";
+const LOCAL_LEADERBOARD = "live/leaderboard-latest.json";
+const LOCAL_REPLAY = "live/replay-latest.json";
 const leaderboardPaths = [
+  LOCAL_LEADERBOARD,
   `https://${LIVE_BUCKET}.s3.us-east-2.amazonaws.com/leaderboard/${LIVE_THING}/latest.json`,
   `https://${LIVE_BUCKET}.s3.amazonaws.com/leaderboard/${LIVE_THING}/latest.json`,
-  `leaderboard/${LIVE_THING}/latest.json`,
 ];
 
 function formatTimestamp(unixSeconds) {
@@ -150,7 +152,8 @@ function formatTimestamp(unixSeconds) {
   return new Date(unixSeconds * 1000).toLocaleString();
 }
 
-function replayUrlFromKey(key) {
+function replayUrlFromKey(key, preferLocal) {
+  if (preferLocal) return LOCAL_REPLAY;
   if (!key) return "#";
   return `https://${LIVE_BUCKET}.s3.us-east-2.amazonaws.com/${key}`;
 }
@@ -188,6 +191,7 @@ function renderLiveLeaderboard(payload, sourceUrl) {
   const heroMeta = document.getElementById("hero-run-meta");
   const replayLink = document.getElementById("live-replay-link");
   const leaderboardLink = document.getElementById("live-leaderboard-link");
+  const preferLocalReplay = sourceUrl === LOCAL_LEADERBOARD;
 
   if (leaderboardLink) leaderboardLink.href = sourceUrl;
 
@@ -224,7 +228,7 @@ function renderLiveLeaderboard(payload, sourceUrl) {
   }
 
   if (replayLink) {
-    replayLink.href = replayUrlFromKey(latest.replay_s3_key);
+    replayLink.href = replayUrlFromKey(latest.replay_s3_key, preferLocalReplay);
   }
 
   if (rows) {
@@ -252,7 +256,10 @@ async function hydrateLiveCloudPanel() {
   try {
     const { data, url } = await fetchJsonWithFallback(leaderboardPaths);
     renderLiveLeaderboard(data, url);
-    statusNode.textContent = `Live data loaded from ${url}`;
+    statusNode.textContent =
+      url === LOCAL_LEADERBOARD
+        ? "Loaded from the latest AWS snapshot bundled with the site"
+        : `Live data loaded from ${url}`;
   } catch (error) {
     statusNode.textContent = `Live data unavailable in browser: ${error.message}`;
   }
