@@ -1,0 +1,1 @@
+from aegis_handler import lambda_handler
