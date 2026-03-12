@@ -6,24 +6,23 @@
     <title>AEGIS-172 | EEC172 Final Project</title>
     <meta
       name="description"
-      content="AEGIS-172 is a two-player cloud-adaptive radar defense arena built on CC3200, UNO coprocessing, and AWS IoT + Lambda + S3."
+      content="AEGIS-172: a two-player cloud-adaptive radar defense arena built on CC3200, Arduino UNO coprocessing, and AWS IoT + Lambda + S3."
     />
-    <link rel="stylesheet" href="styles.css?v=20260311d" />
+    <link rel="stylesheet" href="styles.css?v=20260312d" />
   </head>
   <body>
     <header class="topbar">
       <div class="topbar-inner">
         <a class="logo" href="#top">AEGIS-172</a>
         <nav class="top-nav">
-          <a href="#concept">Concept</a>
-          <a href="#loop">Match Loop</a>
-          <a href="#cloud">Cloud Stack</a>
-          <a href="#live">Live Cloud</a>
-          <a href="#stack">System</a>
-          <a href="#demo">Demo Plan</a>
+          <a href="#description">Description</a>
+          <a href="#design">Design</a>
+          <a href="#implementation">Implementation</a>
+          <a href="#demo">Demo</a>
+          <a href="#live">Leaderboard</a>
         </nav>
         <div class="top-actions">
-          <a href="proposal.html">Proposal +</a>
+          <a href="proposal.html">Proposal</a>
         </div>
       </div>
     </header>
@@ -32,18 +31,17 @@
       <section class="hero reveal">
         <div class="hero-grid">
           <div class="hero-copy">
-            <p class="eyebrow">EEC172 Final Project Pivot</p>
-            <h1>Aegis-172</h1>
+            <p class="eyebrow">EEC172 Final Project</p>
+            <h1>AEGIS-172</h1>
             <p class="lede">
               A two-player cloud-adaptive radar defense arena. One player deploys threats, one player
-              defends sectors in real time. The system fuses live sensor fields, predicts escalation,
-              and reconfigures each round through AWS.
+              defends sectors in real time. The system fuses live sensor data, scores performance, and
+              reconfigures each round through AWS.
             </p>
             <div class="hero-tags">
-              <span>CC3200 Core</span>
-              <span>UART + SPI + I2C</span>
-              <span>AWS IoT + Lambda + S3</span>
-              <span>Multi-Sensor Fusion</span>
+              <span>Aktan Azat</span>
+              <span>Gezheng Kang</span>
+              <span>Spring 2026</span>
             </div>
           </div>
 
@@ -51,148 +49,260 @@
             <p class="panel-title">Match Snapshot</p>
             <div class="score-row">
               <div>
-                <p class="score-label">P1 DEFENDER</p>
+                <p class="score-label">P1 Defender</p>
                 <p class="score-val" id="hero-defender-score">----</p>
               </div>
               <div>
-                <p class="score-label">P2 ATTACKER</p>
+                <p class="score-label">P2 Attacker</p>
                 <p class="score-val" id="hero-attacker-score">----</p>
               </div>
             </div>
             <ul id="hero-run-meta">
               <li>Waiting for live AWS data</li>
-              <li>Mission, replay, and leaderboard are pulled from S3</li>
-              <li>Refresh this page after a round completes</li>
+              <li>Scores pulled from S3 leaderboard</li>
             </ul>
           </aside>
         </div>
       </section>
 
-      <section id="concept" class="section reveal">
-        <header class="section-head editorial-head">
-          <p class="section-kicker">Creative Direction</p>
+      <section id="description" class="section reveal">
+        <header class="section-head">
+          <h2>Project Description</h2>
         </header>
-        <div class="card-grid mode-grid">
-          <article class="card mode-card">
-            <h3>Radar Arena</h3>
-            <p>
-              Stepper-driven scan head sweeps sectors while ultrasonic range traces threat motion. RGB and
-              buzzer layers create a high-pressure control room feel.
-            </p>
+        <div class="prose-grid">
+          <p>
+            AEGIS-172 is an interactive tabletop defense arena built around the CC3200 LaunchPad and an
+            Arduino UNO coprocessor. A stepper-driven ultrasonic radar sweeps the environment, identifying
+            threat sectors through fused signals from ultrasonic distance, ambient light change, and tilt
+            events. The defender controls a servo shield and tactical actions through a joystick and IR
+            remote, while a second player influences round pressure through attack modes triggered by
+            remote buttons.
+          </p>
+          <p>
+            Each match is cloud-adaptive. The CC3200 requests a mission profile from AWS IoT Core, Lambda
+            generates wave parameters, and S3 stores mission files and replay artifacts. At round completion,
+            Lambda computes a weighted score with latency penalties and writes results to a leaderboard,
+            allowing reproducible verification of round behavior.
+          </p>
+          <p>
+            The system boots standalone from flash with no host terminal connection. All interaction is
+            through the joystick, IR remote, and on-device displays (128x128 OLED radar HUD and LCD1602
+            score readout). The CC3200 handles the state machine, cloud communication, OLED rendering, and
+            IR decoding. The UNO handles stepper timing, ultrasonic sampling, servo actuation, RGB/buzzer
+            feedback, and joystick analog reads, communicating over UART at 9600 baud using a structured
+            frame protocol.
+          </p>
+        </div>
+        <div class="card-grid">
+          <article class="card">
+            <h3>Hardware Protocols</h3>
+            <ul>
+              <li><strong>SPI</strong> -- CC3200 to OLED (SSD1351)</li>
+              <li><strong>I2C</strong> -- CC3200 to BMA222 accelerometer</li>
+              <li><strong>UART</strong> -- CC3200 to Arduino UNO (9600 baud)</li>
+            </ul>
           </article>
-          <article class="card mode-card">
-            <h3>Two Roles</h3>
-            <p>
-              Defender uses joystick for shield placement and remote actions. Attacker injects cloud-driven
-              wave pressure and timed anomalies.
-            </p>
+          <article class="card">
+            <h3>Web Service</h3>
+            <ul>
+              <li><strong>AWS IoT Core</strong> -- device shadow, HTTPS REST</li>
+              <li><strong>AWS Lambda</strong> -- mission generation, round scoring</li>
+              <li><strong>AWS S3</strong> -- mission files, replays, leaderboard</li>
+            </ul>
           </article>
-          <article class="card mode-card">
-            <h3>Adaptive Difficulty</h3>
-            <p>
-              Lambda scores reaction latency and sensor anomalies to tune next-round mission intensity in
-              real time.
-            </p>
-          </article>
-          <article class="card mode-card">
-            <h3>Replay Data</h3>
-            <p>
-              Every round emits structured telemetry for deterministic replay, adjudication, and leaderboard
-              ranking from S3 artifacts.
-            </p>
+          <article class="card">
+            <h3>Sensing Devices</h3>
+            <ul>
+              <li><strong>HC-SR04</strong> -- ultrasonic distance (threat detection)</li>
+              <li><strong>IR receiver</strong> -- remote control input</li>
+              <li><strong>Photoresistor</strong> -- ambient light anomaly</li>
+              <li><strong>BMA222</strong> -- tilt/vibration</li>
+              <li><strong>Joystick</strong> -- analog shield positioning</li>
+            </ul>
           </article>
         </div>
       </section>
 
-      <section id="loop" class="section reveal process">
+      <section id="design" class="section reveal">
         <header class="section-head">
-          <p class="section-kicker">Runtime</p>
-          <h2>Eight-stage competitive loop</h2>
+          <h2>Design</h2>
         </header>
+
+        <h3 class="subsection-title">State Machine</h3>
+        <p class="section-text">
+          The match engine runs an eight-stage state machine. Each state has a fixed loop budget. The
+          CC3200 transitions through boot, sensor calibration, cloud mission fetch, preparation countdown,
+          active round (scoring), cloud judging, result sync, and end screen.
+        </p>
         <div class="process-track">
           <article class="step card">
             <p class="step-num">01</p>
-            <h3>Boot + Sync</h3>
-            <p>Load baseline config and sync shadow state.</p>
+            <h3>Boot</h3>
+            <p>Connect WiFi, verify TLS, initialize peripherals.</p>
           </article>
           <article class="step card">
             <p class="step-num">02</p>
             <h3>Calibrate</h3>
-            <p>Baseline ultrasonic, light, tilt, and ambient thermal readings.</p>
+            <p>Baseline ultrasonic distance, light level, and temperature.</p>
           </article>
           <article class="step card">
             <p class="step-num">03</p>
-            <h3>Fetch Mission</h3>
-            <p>IoT event triggers Lambda mission generation and S3 mission handoff.</p>
+            <h3>Mission</h3>
+            <p>POST shadow request, Lambda generates wave JSON, poll for ready.</p>
           </article>
           <article class="step card">
             <p class="step-num">04</p>
-            <h3>Threat Sweep</h3>
-            <p>Stepper scan produces sector map and risk gradients.</p>
+            <h3>Prep</h3>
+            <p>Countdown for players to ready positions.</p>
           </article>
           <article class="step card">
             <p class="step-num">05</p>
-            <h3>Defend</h3>
-            <p>Joystick + IR actions steer servo shield and countermeasure logic.</p>
+            <h3>Active</h3>
+            <p>Threat sweep, shield tracking, scoring ticks, attack modes.</p>
           </article>
           <article class="step card">
             <p class="step-num">06</p>
-            <h3>Score Stream</h3>
-            <p>Telemetry packets publish hit/miss, response latency, and stability metrics.</p>
+            <h3>Judge</h3>
+            <p>Freeze scores, display winner.</p>
           </article>
           <article class="step card">
             <p class="step-num">07</p>
-            <h3>Cloud Judge</h3>
-            <p>Lambda computes winner, penalty model, and next wave seed.</p>
+            <h3>Sync</h3>
+            <p>POST round results to shadow, Lambda scores and writes S3 artifacts.</p>
           </article>
           <article class="step card">
             <p class="step-num">08</p>
-            <h3>Replay + Rank</h3>
-            <p>S3 stores round replay JSON and leaderboard snapshot.</p>
+            <h3>End</h3>
+            <p>Show final scores, wait for restart or sync retry.</p>
+          </article>
+        </div>
+
+        <h3 class="subsection-title">System Architecture</h3>
+        <div class="diagram-wrap">
+          <img
+            src="diagrams/architecture.svg"
+            alt="Architecture diagram showing CC3200, UNO coprocessor, sensors, actuators, and AWS services"
+          />
+        </div>
+        <div class="card-grid arch-grid">
+          <article class="card">
+            <h3>CC3200 Main Controller</h3>
+            <ul>
+              <li>Global state machine and game loop</li>
+              <li>AWS IoT TLS client, shadow sync, HTTPS mission fetch</li>
+              <li>SPI OLED rendering (radar HUD, scores, state indicators)</li>
+              <li>IR decoding via GPIO interrupt + SysTick timing</li>
+              <li>UART1 TX/RX to Arduino for control/sensor frames</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Arduino UNO Coprocessor</h3>
+            <ul>
+              <li>ULN2003 stepper motor sweep (512-step radar scan)</li>
+              <li>HC-SR04 ultrasonic sampling with median-of-3 filter</li>
+              <li>SG90 servo shield actuation</li>
+              <li>RGB LED, buzzer, joystick, and photoresistor reads</li>
+              <li>SoftwareSerial 9600 baud frame exchange</li>
+            </ul>
+          </article>
+        </div>
+        <div class="card protocol-card">
+          <h3>UART Frame Protocol</h3>
+          <p>
+            <strong>Sensor frame</strong> (UNO to CC3200):
+            <code>$S,&lt;ms&gt;,&lt;sector&gt;,&lt;dist_cm&gt;,&lt;lux&gt;,&lt;tilt&gt;,&lt;temp_c10&gt;,&lt;hum_10&gt;,&lt;aux&gt;,&lt;joy&gt;\n</code>
+          </p>
+          <p>
+            <strong>Control frame</strong> (CC3200 to UNO):
+            <code>$C,&lt;servo_deg&gt;,&lt;step_mode&gt;,&lt;buzz_mode&gt;,&lt;rgb_code&gt;,&lt;state&gt;\n</code>
+          </p>
+        </div>
+      </section>
+
+      <section id="implementation" class="section reveal">
+        <header class="section-head">
+          <h2>Implementation</h2>
+        </header>
+
+        <div class="card-grid">
+          <article class="card">
+            <h3>Threat Detection</h3>
+            <p>
+              The UNO sweeps a stepper motor across 512 steps mapped to 16 sectors. At each sensor sample
+              (every 120ms), distance, light, and tilt readings are fused into a 0-15 threat level. The
+              CC3200 applies difficulty scaling, attack mode bonuses, and baseline delta comparisons from
+              the calibration phase.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Shield and Scoring</h3>
+            <p>
+              The defender positions a shield sector using the joystick (analog X mapped to 0-15 sectors
+              with hysteresis). If the shield sector is within 2 of the threat sector, the defender scores
+              proportional to threat level. Otherwise the attacker scores. Scoring ticks happen every 12
+              main loop iterations.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Attack Modes</h3>
+            <p>
+              The attacker triggers timed effects via IR buttons: <strong>Pulse</strong> (+2 threat for
+              140 loops), <strong>Jam</strong> (shifts threat sector by 3 for 170 loops), and
+              <strong>Blind</strong> (inflates lux delta by 220 for 170 loops). These stack with base
+              threat computation.
+            </p>
+          </article>
+        </div>
+        <div class="card-grid">
+          <article class="card">
+            <h3>Cloud Pipeline</h3>
+            <p>
+              The CC3200 opens a TLS socket to the AWS IoT HTTPS endpoint on port 8443. It POSTs a
+              <code>MISSION_REQUEST</code> shadow update with the current difficulty. Lambda generates
+              a wave script and writes it to S3, then updates the shadow with <code>MISSION_READY</code>.
+              After the round, a <code>ROUND_DONE</code> POST triggers Lambda to compute weighted scores,
+              build a replay artifact, and update the S3 leaderboard.
+            </p>
+          </article>
+          <article class="card">
+            <h3>OLED Radar HUD</h3>
+            <p>
+              The 128x128 OLED renders a circular radar with sector markers, a sweep line tracking the
+              current stepper position, a threat dot (yellow/red by severity), a shield dot (green),
+              and a threat meter bar on the right. A header bar shows state, difficulty, and cloud status.
+              A footer bar shows contextual instructions per state. All regions use dirty-flag rendering
+              to minimize SPI writes.
+            </p>
+          </article>
+          <article class="card">
+            <h3>Reproducibility</h3>
+            <p>
+              Firmware source compiles with ARM Compiler TI 20.2.7.LTS against CC3200 SDK 1.5.0. Arduino
+              sketches compile in Arduino IDE 2.x. Lambda handler deploys as a single Python 3.12 file.
+              Pin assignments, UART frame formats, and AWS resource names are documented in the project
+              repository.
+            </p>
           </article>
         </div>
       </section>
 
-      <section id="cloud" class="section reveal">
+      <section id="demo" class="section reveal">
         <header class="section-head">
-          <p class="section-kicker">AWS Core</p>
-          <h2>IoT, Lambda, and S3 are in the critical path</h2>
+          <h2>Video Demo</h2>
         </header>
-
-        <div class="proof-grid">
-          <article class="card proof-card">
-            <h3>IoT Core</h3>
-            <ul>
-              <li>Shadow desired/reported controls match phases and mission versions</li>
-              <li>MQTT topics carry live telemetry, outcomes, and control events</li>
-              <li>Rules fan events into Lambda pipelines</li>
-            </ul>
-          </article>
-
-          <article class="card proof-card">
-            <h3>Lambda</h3>
-            <ul>
-              <li><code>mission_generator</code> creates next-wave JSON from performance history</li>
-              <li><code>score_engine</code> computes weighted score with latency penalties</li>
-              <li><code>replay_builder</code> composes portable run artifact for S3</li>
-            </ul>
-          </article>
-
-          <article class="card proof-card">
-            <h3>S3</h3>
-            <ul>
-              <li>Mission files versioned by run ID and timestamp</li>
-              <li>Telemetry replay files persisted for grading and reproducibility</li>
-              <li>Leaderboard JSON served for project webpage panel</li>
-            </ul>
-          </article>
+        <div class="video-wrap">
+          <iframe
+            src="https://www.youtube.com/embed/KO9WwIWyUp8"
+            title="AEGIS-172 Demo"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowfullscreen
+          ></iframe>
         </div>
       </section>
 
       <section id="live" class="section reveal">
         <header class="section-head">
-          <p class="section-kicker">Live Cloud</p>
-          <h2>Latest AWS round data</h2>
+          <h2>Live AWS Leaderboard</h2>
         </header>
 
         <div class="card-grid live-grid">
@@ -230,87 +340,16 @@
           </article>
 
           <article class="card live-status">
-            <h3>How To Read It</h3>
+            <h3>How It Works</h3>
             <ul>
-              <li><code>NET</code> means the CC3200 is requesting a mission from AWS.</li>
-              <li><code>SYNC</code> means round results are being judged and written back.</li>
-              <li>The website reads the same S3 artifacts the device writes through Lambda.</li>
-              <li>If the panel says unavailable, the bucket URL or CORS still needs browser access.</li>
+              <li>The CC3200 publishes round results to AWS IoT shadow after each match.</li>
+              <li>Lambda computes weighted scores and writes replay + leaderboard JSON to S3.</li>
+              <li>This page fetches the same S3 artifacts the device writes through Lambda.</li>
             </ul>
             <div class="live-actions">
               <button id="refresh-cloud-data" type="button">Refresh Cloud Data</button>
             </div>
             <p id="live-fetch-status" class="live-fetch-status">Waiting for page load...</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="stack" class="section reveal">
-        <header class="section-head">
-          <p class="section-kicker">Embedded Split</p>
-          <h2>CC3200-first architecture with deterministic coprocessing</h2>
-        </header>
-        <div class="card-grid">
-          <article class="card">
-            <h3>CC3200 Main Controller</h3>
-            <ul>
-              <li>Global state machine and competitive game loop</li>
-              <li>AWS IoT TLS client, shadow sync, HTTPS mission fetch</li>
-              <li>SPI display output through 74HC595 pipeline</li>
-              <li>I2C peripheral control and sensor baseline manager</li>
-            </ul>
-          </article>
-          <article class="card">
-            <h3>UNO Real-Time Coprocessor</h3>
-            <ul>
-              <li>Stepper scan timing and SG90 shield actuation</li>
-              <li>Ultrasonic sampling and noise-filtered sector reduction</li>
-              <li>Low-latency actuator commands from UART frames</li>
-              <li>Failsafe local halt if command stream stalls</li>
-            </ul>
-          </article>
-          <article class="card">
-            <h3>Sensor + UI Surface</h3>
-            <ul>
-              <li>Ultrasonic, photoresistor, DHT11, tilt, IR receiver</li>
-              <li>Joystick + buttons for defender controls</li>
-              <li>LCD1602 + 4-digit display + RGB + buzzer for operator feedback</li>
-            </ul>
-          </article>
-        </div>
-      </section>
-
-      <section id="demo" class="section reveal">
-        <header class="section-head">
-          <p class="section-kicker">Verification Strategy</p>
-          <h2>Four-minute demo that proves complexity and polish</h2>
-        </header>
-        <div class="card-grid">
-          <article class="card">
-            <h3>Live Sequence</h3>
-            <ol>
-              <li>Standalone boot from flash and calibration cycle</li>
-              <li>Cloud mission fetch and version confirmation</li>
-              <li>Two-player round with live score evolution</li>
-              <li>Cloud adjudication and leaderboard write-back</li>
-            </ol>
-          </article>
-          <article class="card">
-            <h3>Why this can win the section</h3>
-            <ul>
-              <li>Physical mechatronics and cloud adaptation together</li>
-              <li>Original interaction model with two asymmetric player roles</li>
-              <li>Hard evidence via replay artifacts and telemetry traces</li>
-              <li>Clean wiring and deterministic behavior under time limit</li>
-            </ul>
-          </article>
-          <article class="card proof-card" id="proof">
-            <h3>Current Focus</h3>
-            <ul>
-              <li>Prototype control loop on dual UNO now</li>
-              <li>Keep UART frame contract identical for CC3200 swap-in</li>
-              <li>Integrate AWS pipeline before visual polishing</li>
-            </ul>
           </article>
         </div>
       </section>
@@ -324,6 +363,6 @@
       </div>
     </footer>
 
-    <script src="script.js?v=20260312b"></script>
+    <script src="script.js?v=20260312c"></script>
   </body>
 </html>
