@@ -143,9 +143,9 @@ const LOCAL_LEADERBOARD = "live/leaderboard-latest.json";
 const LOCAL_REPLAY = "live/replay-latest.json";
 const refreshButton = document.getElementById("refresh-cloud-data");
 const leaderboardPaths = [
-  LOCAL_LEADERBOARD,
   `https://${LIVE_BUCKET}.s3.us-east-2.amazonaws.com/leaderboard/${LIVE_THING}/latest.json`,
   `https://${LIVE_BUCKET}.s3.amazonaws.com/leaderboard/${LIVE_THING}/latest.json`,
+  LOCAL_LEADERBOARD,
 ];
 
 function formatTimestamp(unixSeconds) {
@@ -154,9 +154,10 @@ function formatTimestamp(unixSeconds) {
 }
 
 function replayUrlFromKey(key, preferLocal) {
+  if (key) return `https://${LIVE_BUCKET}.s3.us-east-2.amazonaws.com/${key}`;
   if (preferLocal) return new URL(LOCAL_REPLAY, window.location.href).toString();
   if (!key) return "#";
-  return `https://${LIVE_BUCKET}.s3.us-east-2.amazonaws.com/${key}`;
+  return "#";
 }
 
 function withCacheBust(url) {
@@ -267,7 +268,7 @@ async function hydrateLiveCloudPanel(forceRefresh = false) {
     renderLiveLeaderboard(data, url);
     statusNode.textContent =
       url === LOCAL_LEADERBOARD
-        ? "Loaded from the latest deployed AWS snapshot"
+        ? "Loaded from the bundled snapshot because live S3 was unavailable"
         : `Live data loaded from ${url}`;
   } catch (error) {
     statusNode.textContent = `Live data unavailable in browser: ${error.message}`;
