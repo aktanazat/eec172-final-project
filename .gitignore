@@ -34,7 +34,6 @@ presentation/*.jpg
 
 # IDE
 .vscode/
-.claude/
 *.swp
 *.swo
 *~

@@ -6,7 +6,7 @@ import boto3
 
 REGION = os.environ.get("AWS_REGION", "us-east-2")
 THING_NAME = os.environ.get("AEGIS_THING_NAME", "akge_cc3200_board")
-S3_BUCKET = os.environ.get("AEGIS_S3_BUCKET") or os.environ.get("PARKPILOT_S3_BUCKET", "")
+S3_BUCKET = os.environ.get("AEGIS_S3_BUCKET", "")
 
 IOT_DATA = boto3.client("iot-data", region_name=REGION)
 S3 = boto3.client("s3", region_name=REGION)
