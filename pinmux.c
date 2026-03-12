@@ -7,6 +7,11 @@
 #include "gpio.h"
 #include "prcm.h"
 
+#define IR_GPIO_PIN           GPIO_PIN_4
+#define OLED_RST_GPIO_PIN     GPIO_PIN_4
+#define OLED_DC_GPIO_PIN      GPIO_PIN_6
+#define STATUS_LED_GPIO_PIN   GPIO_PIN_1
+
 void PinMuxConfig(void)
 {
     MAP_PRCMPeripheralClkEnable(PRCM_GPIOA0, PRCM_RUN_MODE_CLK);
@@ -23,7 +28,7 @@ void PinMuxConfig(void)
 
     // IR receiver input
     MAP_PinTypeGPIO(PIN_03, PIN_MODE_0, false);
-    MAP_GPIODirModeSet(GPIOA1_BASE, 0x10, GPIO_DIR_MODE_IN);
+    MAP_GPIODirModeSet(GPIOA1_BASE, IR_GPIO_PIN, GPIO_DIR_MODE_IN);
 
     // OLED SPI pins
     MAP_PinTypeSPI(PIN_05, PIN_MODE_7); // CLK
@@ -32,10 +37,10 @@ void PinMuxConfig(void)
 
     // OLED control pins
     MAP_PinTypeGPIO(PIN_18, PIN_MODE_0, false);
-    MAP_GPIODirModeSet(GPIOA3_BASE, 0x10, GPIO_DIR_MODE_OUT); // RST
+    MAP_GPIODirModeSet(GPIOA3_BASE, OLED_RST_GPIO_PIN, GPIO_DIR_MODE_OUT); // RST
 
     MAP_PinTypeGPIO(PIN_53, PIN_MODE_0, false);
-    MAP_GPIODirModeSet(GPIOA3_BASE, 0x40, GPIO_DIR_MODE_OUT); // DC
+    MAP_GPIODirModeSet(GPIOA3_BASE, OLED_DC_GPIO_PIN, GPIO_DIR_MODE_OUT); // DC
 
     // UART0 debug
     MAP_PinTypeUART(PIN_55, PIN_MODE_3);
@@ -47,5 +52,5 @@ void PinMuxConfig(void)
 
     // Status LED
     MAP_PinTypeGPIO(PIN_64, PIN_MODE_0, false);
-    MAP_GPIODirModeSet(GPIOA1_BASE, 0x02, GPIO_DIR_MODE_OUT);
+    MAP_GPIODirModeSet(GPIOA1_BASE, STATUS_LED_GPIO_PIN, GPIO_DIR_MODE_OUT);
 }

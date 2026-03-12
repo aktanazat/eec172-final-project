@@ -244,8 +244,7 @@ void SimpleLinkSockEventHandler(SlSockEvent_t *pSock) {
             break;
 
         default:
-            UART_PRINT("[SOCK EVENT] - Unexpected Event [%x0x]\n\n",pSock->Event);
-          break;
+            break;
     }
 }
 
@@ -308,7 +307,12 @@ static long ConfigureSimpleLinkToDefaultState() {
     long lMode = -1;
 
     lMode = sl_Start(0, 0, 0);
-    ASSERT_ON_ERROR(lMode);
+    if (lMode < 0) {
+        sl_Stop(0xFF);
+        MAP_UtilsDelay(800000);
+        lMode = sl_Start(0, 0, 0);
+        ASSERT_ON_ERROR(lMode);
+    }
 
     // If the device is not in station-mode, try configuring it in station-mode
     if (ROLE_STA != lMode) {
@@ -534,7 +538,7 @@ int tls_connect() {
         return printErrConvenience("Device unable to create secure socket \n\r", iSockID);
     }
 
-    recvTimeout.tv_sec = 2;
+    recvTimeout.tv_sec = 5;
     recvTimeout.tv_usec = 0;
     lRetVal = sl_SetSockOpt(iSockID, SL_SOL_SOCKET, SL_SO_RCVTIMEO,
                             (unsigned char *)&recvTimeout, sizeof(recvTimeout));
@@ -610,14 +614,8 @@ int tls_connect() {
     lRetVal = sl_Connect(iSockID, ( SlSockAddr_t *)&Addr, iAddrSize);
 
     if(lRetVal >= 0) {
-        UART_PRINT("Device has connected to the website:");
-        UART_PRINT("%s", g_Host);
-        UART_PRINT("\n\r");
     }
     else if(lRetVal == SL_ESECSNOVERIFY) {
-        UART_PRINT("Device has connected to the website (UNVERIFIED):");
-        UART_PRINT("%s", g_Host);
-        UART_PRINT("\n\r");
     }
     else if(lRetVal < 0) {
         UART_PRINT("Device couldn't connect to server:");

@@ -5,7 +5,7 @@ SoftwareSerial cc(10, 11); // RX, TX
 
 // HC-SR04 pins (update if your wiring differs)
 const int TRIG_FRONT = 2;
-const int ECHO_FRONT = 3;
+const int ECHO_FRONT = A2;
 const int TRIG_RIGHT = 4;
 const int ECHO_RIGHT = 5;
 const int TRIG_LEFT = 6;
@@ -13,8 +13,22 @@ const int ECHO_LEFT = 7;
 const int TRIG_REAR = 8;
 const int ECHO_REAR = 9;
 
+const int DRIVE_ENA = 3;
+const int DRIVE_IN1 = A0;
+const int DRIVE_IN2 = A1;
+
+const int STEER_ENB = 12;
+const int STEER_IN3 = A3;
+const int STEER_IN4 = A4;
+
+int curSpeed = 0;
+int curSteer = 0;
+unsigned long lastMotorMs = 0;
+
 char lineBuf[64];
 int lineIdx = 0;
+char serialBuf[64];
+int serialIdx = 0;
 unsigned long lastTxMs = 0;
 unsigned long lastLogMs = 0;
 unsigned long txFrames = 0;
@@ -57,11 +71,48 @@ static void printSensorReading(const char *name, int cm) {
   }
 }
 
+static void applyMotor(int speed, int steer) {
+  curSpeed = speed;
+  curSteer = steer;
+  lastMotorMs = millis();
+
+  // rear drive motor
+  if (speed > 0) {
+    digitalWrite(DRIVE_IN1, HIGH);
+    digitalWrite(DRIVE_IN2, LOW);
+    analogWrite(DRIVE_ENA, 255);
+  } else if (speed < 0) {
+    digitalWrite(DRIVE_IN1, LOW);
+    digitalWrite(DRIVE_IN2, HIGH);
+    analogWrite(DRIVE_ENA, 255);
+  } else {
+    digitalWrite(DRIVE_IN1, LOW);
+    digitalWrite(DRIVE_IN2, LOW);
+    analogWrite(DRIVE_ENA, 0);
+  }
+
+  // front steering motor
+  if (steer > 0) {
+    digitalWrite(STEER_IN3, HIGH);
+    digitalWrite(STEER_IN4, LOW);
+    digitalWrite(STEER_ENB, HIGH);
+  } else if (steer < 0) {
+    digitalWrite(STEER_IN3, LOW);
+    digitalWrite(STEER_IN4, HIGH);
+    digitalWrite(STEER_ENB, HIGH);
+  } else {
+    digitalWrite(STEER_IN3, LOW);
+    digitalWrite(STEER_IN4, LOW);
+    digitalWrite(STEER_ENB, LOW);
+  }
+}
+
 static void handleMotorLine(const char *s) {
   int speed = 0;
   int steer = 0;
   if (sscanf(s, "$M,%d,%d", &speed, &steer) == 2) {
     rxCmd++;
+    applyMotor(speed, steer);
     Serial.print("RX motor cmd -> speed=");
     Serial.print(speed);
     Serial.print(" steer=");
@@ -85,6 +136,16 @@ void setup() {
   pinMode(ECHO_LEFT, INPUT);
   pinMode(TRIG_REAR, OUTPUT);
   pinMode(ECHO_REAR, INPUT);
+
+  pinMode(DRIVE_ENA, OUTPUT);
+  pinMode(DRIVE_IN1, OUTPUT);
+  pinMode(DRIVE_IN2, OUTPUT);
+  analogWrite(DRIVE_ENA, 0);
+
+  pinMode(STEER_ENB, OUTPUT);
+  pinMode(STEER_IN3, OUTPUT);
+  pinMode(STEER_IN4, OUTPUT);
+  digitalWrite(STEER_ENB, LOW);
 
   Serial.println("Arduino UART bridge test started");
 }
@@ -113,6 +174,23 @@ void loop() {
     }
   }
 
+  while (Serial.available()) {
+    char c = (char)Serial.read();
+    if (c == '\r') continue;
+    if (c == '\n') {
+      serialBuf[serialIdx] = '\0';
+      if (serialIdx > 0) handleMotorLine(serialBuf);
+      serialIdx = 0;
+    } else if (serialIdx < (int)sizeof(serialBuf) - 1) {
+      serialBuf[serialIdx++] = c;
+    }
+  }
+
+  if ((curSpeed != 0 || curSteer != 0) && millis() - lastMotorMs > 500) {
+    applyMotor(0, 0);
+    Serial.println("WATCHDOG: motor stopped (no cmd for 500ms)");
+  }
+
   if (millis() - lastTxMs >= 100) {
     char frame[40];
     snprintf(frame, sizeof(frame), "$S,%d,%d,%d,%d\n", front, right, left, rear);
@@ -122,35 +200,6 @@ void loop() {
   }
 
   if (millis() - lastLogMs >= 1000) {
-    Serial.print("SENSORS -> ");
-    printSensorReading("FRONT", front);
-    Serial.print(" | ");
-    printSensorReading("RIGHT", right);
-    Serial.print(" | ");
-    printSensorReading("LEFT", left);
-    Serial.print(" | ");
-    printSensorReading("REAR", rear);
-    Serial.println();
-
-    Serial.print("TX frame -> $S,");
-    Serial.print(front);
-    Serial.print(",");
-    Serial.print(right);
-    Serial.print(",");
-    Serial.print(left);
-    Serial.print(",");
-    Serial.println(rear);
-
-    Serial.print("UART DBG -> TX_frames=");
-    Serial.print(txFrames);
-    Serial.print(" RX_bytes=");
-    Serial.print(rxBytes);
-    Serial.print(" RX_lines=");
-    Serial.print(rxLines);
-    Serial.print(" RX_cmd=");
-    Serial.print(rxCmd);
-    Serial.print(" RX_unknown=");
-    Serial.println(rxUnknown);
     lastLogMs = millis();
   }
 }

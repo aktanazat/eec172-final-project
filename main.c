@@ -1,5 +1,5 @@
 //*****************************************************************************
-// ParkPilot Final Project Firmware (CC3200)
+// AEGIS-172 Final Project Firmware (CC3200)
 //*****************************************************************************
 
 #include <stdio.h>
@@ -22,7 +22,6 @@
 #include "gpio.h"
 #include "spi.h"
 #include "systick.h"
-#include "timer.h"
 
 #include "pinmux.h"
 #include "gpio_if.h"
@@ -34,59 +33,79 @@
 #include "i2c_if.h"
 #include "utils/network_utils.h"
 
-#if defined(SELF_TEST) && !defined(PARKPILOT_ENABLE_SELF_TEST)
-#undef SELF_TEST
-#endif
-
 #define SERVER_NAME           "a126k3e19n75q0-ats.iot.us-east-2.amazonaws.com"
 #define SERVER_PORT           8443
 
-#define POSTHEADER "POST /things/akge_cc3200_board/shadow HTTP/1.1\r\n"
-#define GETHEADER  "GET /things/akge_cc3200_board/shadow HTTP/1.1\r\n"
-#define HOSTHEADER "Host: a126k3e19n75q0-ats.iot.us-east-2.amazonaws.com\r\n"
-#define CHEADER    "Connection: Keep-Alive\r\n"
-#define CTHEADER   "Content-Type: application/json; charset=utf-8\r\n"
-#define CLHEADER1  "Content-Length: "
-#define CLHEADER2  "\r\n\r\n"
+#define POSTHEADER            "POST /things/akge_cc3200_board/shadow HTTP/1.1\r\n"
+#define SHADOWTOPICPOSTHEADER "POST /topics/$aws/things/akge_cc3200_board/shadow/update?qos=0 HTTP/1.1\r\n"
+#define GETHEADER             "GET /things/akge_cc3200_board/shadow HTTP/1.1\r\n"
+#define HOSTHEADER            "Host: a126k3e19n75q0-ats.iot.us-east-2.amazonaws.com\r\n"
+#define CHEADER               "Connection: close\r\n"
+#define CTHEADER              "Content-Type: application/json; charset=utf-8\r\n"
+#define CLHEADER1             "Content-Length: "
+#define CLHEADER2             "\r\n\r\n"
 
-#define DATE    19
-#define MONTH   2
-#define YEAR    2026
-#define HOUR    22
-#define MINUTE  30
-#define SECOND  0
+#define DATE                  19
+#define MONTH                 2
+#define YEAR                  2026
+#define HOUR                  22
+#define MINUTE                30
+#define SECOND                0
 
-#define IR_GPIO_PORT         GPIOA1_BASE
-#define IR_GPIO_PIN          0x10
-#define SYSCLKFREQ           80000000ULL
-#define SYSTICK_RELOAD_VAL   8000000UL
+#define IR_GPIO_PORT          GPIOA1_BASE
+#define IR_GPIO_PIN           GPIO_PIN_4
+#define SYSCLKFREQ            80000000ULL
+#define SYSTICK_RELOAD_VAL    8000000UL
 #define TICKS_TO_US(ticks) ((((ticks) / SYSCLKFREQ) * 1000000ULL) + ((((ticks) % SYSCLKFREQ) * 1000000ULL) / SYSCLKFREQ))
 
-#define UART1_BAUD           9600
+#define UART1_BAUD            9600
 
-#define BMA222_ADDR          0x18
-#define COLLISION_THRESH2    280000
+#define SHADOW_BUF_SIZE       4096
+#define S3_URL_BUF_SIZE       2048
 
-#define SHADOW_BUF_SIZE      4096
-#define S3_BUF_SIZE          4096
-#define S3_URL_BUF_SIZE      2048
+#define SECTOR_COUNT          16
+#define LOOP_DELAY_TICKS      120000UL
 
-#define MODE_IDLE            0
-#define MODE_MANUAL          1
-#define MODE_AVOID           2
-#define MODE_PARK            3
+#define SENSOR_TIMEOUT_LOOPS  96
+#define CONTROL_INTERVAL_LOOPS 6
+#define CONTROL_RESEND_LOOPS  18
+#define DRAW_INTERVAL_LOOPS   5
+#define LOG_INTERVAL_LOOPS    320
+#define SHADOW_INTERVAL_LOOPS 160
+#define MISSION_POLL_LOOPS    180
+#define MISSION_REQUEST_RETRY_LOOPS 120
+#define SCORE_INTERVAL_LOOPS  12
+#define CONTROL_KEEPALIVE_LOOPS 80
+#define IR_DEBOUNCE_LOOPS     16
+#define CLOUD_RETRY_COOLDOWN_LOOPS 3000
+#define SYNC_RETRY_LOOPS      800
 
-#define PARK_SEARCH_GAP      0
-#define PARK_REQUEST_CLOUD   1
-#define PARK_WAIT_GUIDANCE   2
-#define PARK_EXEC_1          3
-#define PARK_EXEC_2          4
-#define PARK_EXEC_3          5
-#define PARK_DONE            6
+#define CALIBRATE_LOOPS       220
+#define MISSION_WAIT_LOOPS    400
+#define PREP_LOOPS            120
+#define ACTIVE_ROUND_LOOPS    2200
+#define JUDGE_LOOPS           120
+#define SYNC_LOOPS            6000
 
-#define DIST_NEAR            25
-#define DIST_MED             50
-#define DIST_FAR             80
+#define ATTACK_PULSE_LOOPS    140
+#define ATTACK_JAM_LOOPS      170
+#define ATTACK_BLIND_LOOPS    170
+#define BLOCK_WINDOW_SECTORS  2
+
+#define DIST_NEAR             12
+#define DIST_MED              24
+#define DIST_FAR              40
+
+#define BTN_START             1
+#define BTN_DIFF_UP           2
+#define BTN_MISSION           3
+#define BTN_ATTACK_PULSE      4
+#define BTN_RESET             5
+#define BTN_ATTACK_JAM        6
+#define BTN_ATTACK_BLIND      8
+#define BTN_ABORT             10
+#define BTN_DIFF_DOWN         12
+#define BTN_SYNC              13
 
 #if defined(ccs) || defined(gcc)
 extern void (* const g_pfnVectors[])(void);
@@ -95,43 +114,171 @@ extern void (* const g_pfnVectors[])(void);
 extern uVectorEntry __vector_table;
 #endif
 
+typedef struct SensorFrame {
+    unsigned long ms;
+    int sector;
+    int distCm;
+    int lux;
+    int tilt;
+    int tempC10;
+    int hum10;
+    int aux;
+    int joy;
+} SensorFrame;
+
+typedef enum RoundState {
+    RS_BOOT = 0,
+    RS_CALIBRATE = 1,
+    RS_MISSION = 2,
+    RS_PREP = 3,
+    RS_ACTIVE = 4,
+    RS_JUDGE = 5,
+    RS_SYNC = 6,
+    RS_END = 7
+} RoundState;
+
 volatile unsigned long g_irCmd = 0;
 volatile int g_bitCount = 0;
 volatile int g_codeReady = 0;
+unsigned long g_irEdgeCount = 0;
+unsigned long g_irCodeCount = 0;
 
 volatile int g_sensorReady = 0;
 unsigned long g_uart1RxBytes = 0;
 unsigned long g_uart1RxLines = 0;
 unsigned long g_uart1RxOverflow = 0;
+unsigned long g_uart1TxLines = 0;
+unsigned long g_lastIrAcceptLoop = 0;
 
-char g_softLine[80];
+char g_softLine[128];
+char g_readyLine[128];
 volatile int g_softIdx = 0;
 unsigned long g_softParseOk = 0;
 unsigned long g_softParseFail = 0;
 
-int g_mode = MODE_IDLE;
-int g_parkState = PARK_SEARCH_GAP;
-unsigned long g_parkCounter = 0;
+SensorFrame g_sensor = {0, 0, 400, 0, 0, 250, 500, 0, 512};
 
-int g_speed = 40;
-int g_targetSpeed = 0;
-int g_targetSteer = 0;
+RoundState g_state = RS_BOOT;
+unsigned long g_loopCount = 0;
+unsigned long g_stateStartLoop = 0;
+unsigned long g_lastSensorLoop = 0;
+unsigned long g_lastControlLoop = 0;
+unsigned long g_lastDrawLoop = 0;
+unsigned long g_lastLogLoop = 0;
+unsigned long g_lastShadowLoop = 0;
+unsigned long g_lastMissionPollLoop = 0;
+unsigned long g_lastMissionRequestLoop = 0;
+int g_waitingForSensor = 0;
 
-int g_front = 120, g_right = 120, g_left = 120, g_rear = 120;
-int g_collision = 0;
+int g_servoDeg = 90;
+int g_stepMode = 0;
+int g_buzzMode = 0;
+int g_rgbCode = 4;
+int g_shieldSector = 0;
+
+int g_defenderScore = 0;
+int g_attackerScore = 0;
+int g_missionDifficulty = 1;
+int g_missionReady = 0;
+int g_roundReported = 0;
+int g_shadowDirty = 1;
+int g_cloudOnline = 0;
+int g_forceLocalMission = 0;
+unsigned long g_nextCloudRetryLoop = 0;
+int g_lastCloudError = 0;
+char g_lastCloudOp[8] = "BOOT";
+
+int g_baseDist = 200;
+int g_baseLux = 500;
+int g_baseTemp10 = 250;
+int g_baseHum10 = 500;
+long g_calDistSum = 0;
+long g_calLuxSum = 0;
+long g_calTempSum = 0;
+long g_calHumSum = 0;
+int g_calCount = 0;
+
+int g_cachedThreat = 0;
+int g_cachedThreatSector = 0;
+int g_cachedBlocked = 0;
+
+unsigned long g_attackPulseUntil = 0;
+unsigned long g_attackJamUntil = 0;
+unsigned long g_attackBlindUntil = 0;
+unsigned long g_lastScoreLoop = 0;
+int g_attackAction = 0;
+
 int g_sockID = -1;
-
 char g_httpBuf[SHADOW_BUF_SIZE];
-char g_s3Buf[S3_BUF_SIZE];
-char g_s3GuidanceUrl[S3_URL_BUF_SIZE];
-char g_lastS3GuidanceUrl[S3_URL_BUF_SIZE];
-int g_s3GuidanceFetched = 0;
+char g_s3MissionUrl[S3_URL_BUF_SIZE];
 
-#ifdef SELF_TEST
-volatile int g_selfTestForceCollision = 0;
-#endif
+static const int g_sectorDx[SECTOR_COUNT] = {0, 12, 23, 30, 32, 30, 23, 12, 0, -12, -23, -30, -32, -30, -23, -12};
+static const int g_sectorDy[SECTOR_COUNT] = {-32, -30, -23, -12, 0, 12, 23, 30, 32, 30, 23, 12, 0, -12, -23, -30};
 
-static inline void SysTickReset(void) { HWREG(NVIC_ST_CURRENT) = 1; }
+static inline void SysTickReset(void)
+{
+    HWREG(NVIC_ST_CURRENT) = 1;
+}
+
+static int clampInt(int value, int lo, int hi)
+{
+    if (value < lo) return lo;
+    if (value > hi) return hi;
+    return value;
+}
+
+static int absInt(int value)
+{
+    return (value < 0) ? -value : value;
+}
+
+static unsigned long loopsSince(unsigned long start)
+{
+    return g_loopCount - start;
+}
+
+static const char *stateLabel(RoundState state)
+{
+    switch (state) {
+        case RS_BOOT: return "BOOT";
+        case RS_CALIBRATE: return "CAL ";
+        case RS_MISSION: return "NET ";
+        case RS_PREP: return "PREP";
+        case RS_ACTIVE: return "ACT ";
+        case RS_JUDGE: return "JDG ";
+        case RS_SYNC: return "SYNC";
+        default: return "END ";
+    }
+}
+
+static const char *cloudLabel(void)
+{
+    if (!g_cloudOnline) return "LOCAL";
+    if (g_state == RS_MISSION && !g_missionReady) return "FETCH";
+    if (g_state == RS_SYNC) return "SYNC";
+    return "CLOUD";
+}
+
+static const char *attackLabel(void)
+{
+    if (g_attackPulseUntil > g_loopCount) return "PULSE";
+    if (g_attackJamUntil > g_loopCount) return "JAM";
+    if (g_attackBlindUntil > g_loopCount) return "BLIND";
+    return "READY";
+}
+
+static int attackMode(void)
+{
+    if (g_attackPulseUntil > g_loopCount) return 1;
+    if (g_attackJamUntil > g_loopCount) return 2;
+    if (g_attackBlindUntil > g_loopCount) return 3;
+    return 0;
+}
+
+static const char *winnerLabel(void)
+{
+    return (g_defenderScore >= g_attackerScore) ? "DEF" : "ATK";
+}
 
 static void BoardInit(void)
 {
@@ -166,10 +313,13 @@ static void SysTickHandler(void)
 static void IRIntHandler(void)
 {
     unsigned long status = MAP_GPIOIntStatus(IR_GPIO_PORT, true);
+    unsigned long us;
+
     MAP_GPIOIntClear(IR_GPIO_PORT, status);
     if (!(status & IR_GPIO_PIN) || g_codeReady) return;
+    g_irEdgeCount++;
 
-    unsigned long us = TICKS_TO_US(SYSTICK_RELOAD_VAL - MAP_SysTickValueGet());
+    us = TICKS_TO_US(SYSTICK_RELOAD_VAL - MAP_SysTickValueGet());
     SysTickReset();
 
     if (us > 3000) {
@@ -184,22 +334,28 @@ static void IRIntHandler(void)
     }
 
     g_bitCount++;
-    if (g_bitCount == 48) g_codeReady = 1;
+    if (g_bitCount == 48) {
+        g_codeReady = 1;
+        g_irCodeCount++;
+    }
 }
 
 static int IRCodeToButton(unsigned long cmd)
 {
     switch (cmd) {
-        case 0x0809: return 1;
-        case 0x8889: return 2;
-        case 0x4849: return 3;
-        case 0xC8C9: return 4;
-        case 0x2829: return 5;
-        case 0xA8A9: return 6;
-        case 0xE8E9: return 8;
-        case 0x4C4D: return 10; // MUTE
-        case 0x2C2D: return 12;
-        case 0xACAD: return 13;
+        case 0x9899: return 0;
+        case 0x0809: return BTN_START;
+        case 0x8889: return BTN_DIFF_UP;
+        case 0x4849: return BTN_MISSION;
+        case 0xC8C9: return BTN_ATTACK_PULSE;
+        case 0x2829: return BTN_RESET;
+        case 0xA8A9: return BTN_ATTACK_JAM;
+        case 0x6869: return 7;
+        case 0xE8E9: return BTN_ATTACK_BLIND;
+        case 0x4C4D: return BTN_ABORT;
+        case 0xECED: return 11;
+        case 0x2C2D: return BTN_DIFF_DOWN;
+        case 0xACAD: return BTN_SYNC;
         default: return -1;
     }
 }
@@ -238,6 +394,18 @@ static void Uart1PollRx(void)
             g_softIdx = 0;
         }
 
+        if (c == '\n' || c == '\r') {
+            if (g_softIdx > 0) {
+                g_softLine[g_softIdx] = '\0';
+                strncpy(g_readyLine, g_softLine, sizeof(g_readyLine) - 1);
+                g_readyLine[sizeof(g_readyLine) - 1] = '\0';
+                g_uart1RxLines++;
+                g_sensorReady = 1;
+            }
+            g_softIdx = 0;
+            continue;
+        }
+
         if (g_softIdx >= (int)sizeof(g_softLine) - 1) {
             g_uart1RxOverflow++;
             g_softIdx = 0;
@@ -245,52 +413,25 @@ static void Uart1PollRx(void)
         }
 
         g_softLine[g_softIdx++] = (char)c;
-        g_softLine[g_softIdx] = '\0';
-
-        if (c == '\n' || c == '\r') {
-            g_uart1RxLines++;
-            g_sensorReady = 1;
-        }
     }
 }
 
 static void Uart1TxString(const char *s)
 {
-    while (*s) MAP_UARTCharPut(UARTA1_BASE, (unsigned char)*s++);
-}
-
-static void sendMotorCommand(int spd, int ang)
-{
-    static int lastSpd = 9999;
-    static int lastAng = 9999;
-    char msg[24];
-
-    snprintf(msg, sizeof(msg), "$M,%03d,%+03d\n", spd, ang);
-    Uart1TxString(msg);
-
-    if (spd != lastSpd || ang != lastAng) {
-        UART_PRINT("Motor cmd: %s", msg);
-        lastSpd = spd;
-        lastAng = ang;
+    const char *p = s;
+    while (*p) {
+        if (*p == '\n') g_uart1TxLines++;
+        p++;
     }
-}
-
-static int parseSensorFrame(const char *line)
-{
-    int f, r, l, b;
-    if (sscanf(line, "$S,%d,%d,%d,%d", &f, &r, &l, &b) == 4) {
-        g_front = f;
-        g_right = r;
-        g_left = l;
-        g_rear = b;
-        return 0;
+    while (*s) {
+        MAP_UARTCharPut(UARTA1_BASE, (unsigned char)*s++);
     }
-    return -1;
 }
 
 static int set_time(void)
 {
     long retVal;
+
     g_time.tm_day = DATE;
     g_time.tm_mon = MONTH;
     g_time.tm_year = YEAR;
@@ -305,39 +446,85 @@ static int set_time(void)
     return SUCCESS;
 }
 
-static int http_post_json(int sock, const char *json)
+static int ensureTlsSocket(void)
 {
-    char sendBuf[900];
+    if (g_sockID >= 0) return 0;
+    if (g_loopCount < g_nextCloudRetryLoop) return -1;
+
+    g_sockID = tls_connect();
+    if (g_sockID < 0) {
+        g_cloudOnline = 0;
+        g_lastCloudError = g_sockID;
+        snprintf(g_lastCloudOp, sizeof(g_lastCloudOp), "TLS");
+        g_nextCloudRetryLoop = g_loopCount + CLOUD_RETRY_COOLDOWN_LOOPS;
+        return -1;
+    }
+
+    g_cloudOnline = 1;
+    return 0;
+}
+
+static int http_post_path_json(int sock, const char *pathHeader, const char *json)
+{
+    char sendBuf[1400];
     char recvBuf[512];
-    char lenBuf[16];
-    char *p = sendBuf;
+    int reqLen;
     int ret;
 
-    strcpy(p, POSTHEADER); p += strlen(POSTHEADER);
-    strcpy(p, HOSTHEADER); p += strlen(HOSTHEADER);
-    strcpy(p, CHEADER); p += strlen(CHEADER);
-    strcpy(p, CTHEADER); p += strlen(CTHEADER);
-    strcpy(p, CLHEADER1); p += strlen(CLHEADER1);
-    sprintf(lenBuf, "%d", (int)strlen(json));
-    strcpy(p, lenBuf); p += strlen(lenBuf);
-    strcpy(p, CLHEADER2); p += strlen(CLHEADER2);
-    strcpy(p, json); p += strlen(json);
+    reqLen = snprintf(sendBuf, sizeof(sendBuf),
+                      "%s%s%s%s%s%d%s%s",
+                      pathHeader,
+                      HOSTHEADER,
+                      CHEADER,
+                      CTHEADER,
+                      CLHEADER1,
+                      (int)strlen(json),
+                      CLHEADER2,
+                      json);
+    if (reqLen <= 0 || reqLen >= (int)sizeof(sendBuf)) return -3;
 
-    ret = sl_Send(sock, sendBuf, strlen(sendBuf), 0);
+    ret = sl_Send(sock, sendBuf, reqLen, 0);
     if (ret < 0) return ret;
 
     ret = sl_Recv(sock, recvBuf, sizeof(recvBuf) - 1, 0);
     if (ret == SL_EAGAIN) return 0;
     if (ret < 0) return ret;
-    recvBuf[ret] = 0;
+    recvBuf[ret] = '\0';
 
     if (strstr(recvBuf, "HTTP/1.1 4") || strstr(recvBuf, "HTTP/1.1 5")) {
-        UART_PRINT("Shadow POST server error\n\r");
         return -2;
     }
 
-    // AWS may return body-only chunks on keep-alive sockets; treat as success.
     return 0;
+}
+
+static int http_post_path_json_fire_and_forget(int sock, const char *pathHeader, const char *json)
+{
+    char sendBuf[1400];
+    int reqLen;
+    int ret;
+
+    reqLen = snprintf(sendBuf, sizeof(sendBuf),
+                      "%s%s%s%s%s%d%s%s",
+                      pathHeader,
+                      HOSTHEADER,
+                      CHEADER,
+                      CTHEADER,
+                      CLHEADER1,
+                      (int)strlen(json),
+                      CLHEADER2,
+                      json);
+    if (reqLen <= 0 || reqLen >= (int)sizeof(sendBuf)) return -3;
+
+    ret = sl_Send(sock, sendBuf, reqLen, 0);
+    if (ret < 0) return ret;
+    if (ret != reqLen) return -4;
+    return 0;
+}
+
+static int http_post_json(int sock, const char *json)
+{
+    return http_post_path_json(sock, POSTHEADER, json);
 }
 
 static int http_get_shadow(int sock, char *resp, int respSize)
@@ -353,6 +540,7 @@ static int http_get_shadow(int sock, char *resp, int respSize)
 
     ret = sl_Send(sock, sendBuf, strlen(sendBuf), 0);
     if (ret < 0) return ret;
+
     ret = sl_Recv(sock, resp, respSize - 1, 0);
     if (ret == SL_EAGAIN) return -1;
     if (ret < 0) return ret;
@@ -360,11 +548,24 @@ static int http_get_shadow(int sock, char *resp, int respSize)
     return ret;
 }
 
+static int extract_json_int_value(const char *json, const char *key, int *out)
+{
+    char pattern[64];
+    const char *p;
+
+    snprintf(pattern, sizeof(pattern), "\"%s\":", key);
+    p = strstr(json, pattern);
+    if (!p) return -1;
+    p += strlen(pattern);
+    while (*p == ' ' || *p == '\t') p++;
+    if (sscanf(p, "%d", out) == 1) return 0;
+    return -1;
+}
+
 static int extract_json_string_value(const char *json, const char *key, char *out, int outSize)
 {
     char pattern[96];
     const char *p;
-    int truncated = 0;
     int i = 0;
 
     snprintf(pattern, sizeof(pattern), "\"%s\":\"", key);
@@ -376,401 +577,748 @@ static int extract_json_string_value(const char *json, const char *key, char *ou
         if (*p == '\\' && *(p + 1)) p++;
         out[i++] = *p++;
     }
-    if (*p && *p != '"') truncated = 1;
     out[i] = '\0';
-    if (truncated) return -2;
     return (i > 0) ? 0 : -1;
 }
 
-static int parse_https_url(const char *url, char *host, int hostSize, char *path, int pathSize)
+static int requestCloudMission(void)
 {
-    const char *p;
-    const char *slash;
-    int hostLen;
-    int pathLen;
+    char payload[192];
+    int ret;
 
-    if (strncmp(url, "https://", 8) != 0) return -1;
-    p = url + 8;
-    slash = strchr(p, '/');
-    if (!slash) return -1;
+    snprintf(g_lastCloudOp, sizeof(g_lastCloudOp), "REQ");
+    if (ensureTlsSocket() < 0) return -1;
 
-    hostLen = (int)(slash - p);
-    if (hostLen <= 0 || hostLen >= hostSize) return -1;
-    memcpy(host, p, hostLen);
-    host[hostLen] = '\0';
-
-    pathLen = (int)strlen(slash);
-    if (pathLen <= 0 || pathLen >= pathSize) return -1;
-    memcpy(path, slash, pathLen + 1);
-    return 0;
-}
-
-static int https_get_url(const char *url, char *resp, int respSize)
-{
-    char host[256];
-    char path[S3_URL_BUF_SIZE];
-    char req[3072];
-    unsigned int uiIP;
-    SlSockAddrIn_t addr;
-    SlTimeval_t recvTimeout;
-    unsigned char ucMethod = SL_SO_SEC_METHOD_TLSV1_2;
-    unsigned int uiCipher = SL_SEC_MASK_TLS_ECDHE_RSA_WITH_AES_128_CBC_SHA256;
-    int sock;
-    int total = 0;
-    long ret;
-
-    if (parse_https_url(url, host, sizeof(host), path, sizeof(path)) < 0) return -10;
-
-    ret = sl_NetAppDnsGetHostByName((signed char *)host, strlen(host), (unsigned long *)&uiIP, SL_AF_INET);
-    if (ret < 0) return (int)ret;
-
-    sock = sl_Socket(SL_AF_INET, SL_SOCK_STREAM, SL_SEC_SOCKET);
-    if (sock < 0) return sock;
-
-    ret = sl_SetSockOpt(sock, SL_SOL_SOCKET, SL_SO_SECMETHOD, &ucMethod, sizeof(ucMethod));
-    if (ret < 0) {
-        sl_Close(sock);
-        return (int)ret;
-    }
-
-    ret = sl_SetSockOpt(sock, SL_SOL_SOCKET, SL_SO_SECURE_MASK, &uiCipher, sizeof(uiCipher));
-    if (ret < 0) {
-        sl_Close(sock);
-        return (int)ret;
-    }
-
-    recvTimeout.tv_sec = 2;
-    recvTimeout.tv_usec = 0;
-    ret = sl_SetSockOpt(sock, SL_SOL_SOCKET, SL_SO_RCVTIMEO, (unsigned char *)&recvTimeout, sizeof(recvTimeout));
-    if (ret < 0) {
-        sl_Close(sock);
-        return (int)ret;
-    }
-
-    addr.sin_family = SL_AF_INET;
-    addr.sin_port = sl_Htons(443);
-    addr.sin_addr.s_addr = sl_Htonl(uiIP);
-
-    ret = sl_Connect(sock, (SlSockAddr_t *)&addr, sizeof(SlSockAddrIn_t));
-    if (ret < 0 && ret != SL_ESECSNOVERIFY) {
-        sl_Close(sock);
-        return (int)ret;
-    }
-
-    if (snprintf(req, sizeof(req), "GET %s HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", path, host) >= (int)sizeof(req)) {
-        sl_Close(sock);
-        return -11;
-    }
-
-    ret = sl_Send(sock, req, strlen(req), 0);
-    if (ret < 0) {
-        sl_Close(sock);
-        return (int)ret;
-    }
-
-    ret = sl_Recv(sock, resp, respSize - 1, 0);
-    if (ret == SL_EAGAIN) {
-        sl_Close(sock);
-        return -12;
-    }
-    if (ret < 0) {
-        sl_Close(sock);
-        return (int)ret;
-    }
-
-    total = (int)ret;
-    resp[total] = '\0';
-
-    if (!(strstr(resp, "200 OK") || strstr(resp, "\"steps\""))) {
-        ret = sl_Recv(sock, resp + total, respSize - total - 1, 0);
-        if (ret > 0) {
-            total += (int)ret;
-            resp[total] = '\0';
-        }
-    }
-
-    sl_Close(sock);
-
-    if (strstr(resp, "200 OK") || strstr(resp, "\"steps\"")) return 0;
-    UART_PRINT("S3 GET unexpected response: %.96s\n\r", resp);
-    return -13;
-}
-
-static void awsShadowUpdate(int collision)
-{
-    char payload[320];
-    int postRet;
     snprintf(payload, sizeof(payload),
-        "{\"state\":{\"reported\":{\"mode\":%d,\"speed\":%d,\"front\":%d,\"right\":%d,\"left\":%d,\"rear\":%d,\"collision\":%s}}}",
-        g_mode, g_speed, g_front, g_right, g_left, g_rear, collision ? "true" : "false");
+             "{\"state\":{\"desired\":{\"cmd\":\"MISSION_REQUEST\",\"project\":\"AEGIS-172\",\"mission_level\":%d}}}",
+             g_missionDifficulty);
 
-    if (g_sockID < 0) g_sockID = tls_connect();
-    if (g_sockID < 0) return;
-
-    postRet = http_post_json(g_sockID, payload);
-    if (postRet < 0) {
-        UART_PRINT("Shadow POST failed: %d\n\r", postRet);
+    ret = http_post_json(g_sockID, payload);
+    if (ret < 0) {
         sl_Close(g_sockID);
-        g_sockID = tls_connect();
-        if (g_sockID >= 0) {
-            postRet = http_post_json(g_sockID, payload);
-            if (postRet < 0) UART_PRINT("Shadow POST retry failed: %d\n\r", postRet);
-        }
+        g_sockID = -1;
+        g_cloudOnline = 0;
+        g_lastCloudError = ret;
+        g_nextCloudRetryLoop = g_loopCount + CLOUD_RETRY_COOLDOWN_LOOPS;
+        return -1;
+    } else {
+        sl_Close(g_sockID);
+        g_sockID = -1;
+        g_lastCloudError = 0;
     }
-}
-
-static void requestCloudParking(void)
-{
-    const char *payload = "{\"state\":{\"desired\":{\"var\":\"PARK_REQUEST\"}}}";
-    if (g_sockID >= 0) http_post_json(g_sockID, payload);
-}
-
-static int hasCloudGuidance(void)
-{
-    int urlRet;
-    int s3Ret;
-
-    if (g_sockID < 0) return 0;
-    if (http_get_shadow(g_sockID, g_httpBuf, sizeof(g_httpBuf)) < 0) return 0;
-
-    urlRet = extract_json_string_value(g_httpBuf, "park_guidance_url", g_s3GuidanceUrl, sizeof(g_s3GuidanceUrl));
-    if (urlRet == -2) {
-        UART_PRINT("park_guidance_url truncated\n\r");
-    }
-
-    if (urlRet == 0) {
-        if (!g_s3GuidanceFetched || strcmp(g_s3GuidanceUrl, g_lastS3GuidanceUrl) != 0) {
-            s3Ret = https_get_url(g_s3GuidanceUrl, g_s3Buf, sizeof(g_s3Buf));
-            if (s3Ret == 0) {
-                strncpy(g_lastS3GuidanceUrl, g_s3GuidanceUrl, sizeof(g_lastS3GuidanceUrl) - 1);
-                g_lastS3GuidanceUrl[sizeof(g_lastS3GuidanceUrl) - 1] = '\0';
-                g_s3GuidanceFetched = 1;
-                UART_PRINT("S3 guidance fetched\n\r");
-            } else {
-                UART_PRINT("S3 guidance fetch failed: %d\n\r", s3Ret);
-            }
-        }
-    }
-
-    if (g_s3GuidanceFetched) return 1;
-    return (strstr(g_httpBuf, "park_guidance") != NULL);
-}
-
-static int bmaReadAccel(int *mag2)
-{
-    unsigned char reg = 0x02;
-    unsigned char data[6];
-    short x, y, z;
-
-    if (I2C_IF_ReadFrom(BMA222_ADDR, &reg, 1, data, 6) < 0) return -1;
-
-    x = (short)(((short)data[1] << 8) | data[0]) >> 6;
-    y = (short)(((short)data[3] << 8) | data[2]) >> 6;
-    z = (short)(((short)data[5] << 8) | data[4]) >> 6;
-
-    *mag2 = (x * x) + (y * y) + (z * z);
     return 0;
 }
 
-static void drawBar(int x, int y, int w, int h, int dist)
+static int pollCloudMission(void)
 {
-    unsigned int c;
-    int fill = h;
+    int missionLevel = 0;
 
-    if (dist < DIST_NEAR) c = RED;
-    else if (dist < DIST_MED) c = YELLOW;
-    else c = GREEN;
+    snprintf(g_lastCloudOp, sizeof(g_lastCloudOp), "POLL");
+    if (ensureTlsSocket() < 0) return -1;
+    if (http_get_shadow(g_sockID, g_httpBuf, sizeof(g_httpBuf)) < 0) {
+        g_lastCloudError = -2;
+        sl_Close(g_sockID);
+        g_sockID = -1;
+        g_cloudOnline = 0;
+        g_nextCloudRetryLoop = g_loopCount + CLOUD_RETRY_COOLDOWN_LOOPS;
+        return -1;
+    }
 
-    if (dist > DIST_FAR) dist = DIST_FAR;
-    fill = (h * dist) / DIST_FAR;
-    if (fill < 2) fill = 2;
+    if (extract_json_int_value(g_httpBuf, "mission_level", &missionLevel) == 0) {
+        g_missionDifficulty = clampInt(missionLevel, 1, 5);
+        g_missionReady = 1;
+    }
 
-    drawRect(x, y, w, h, WHITE);
-    fillRect(x + 1, y + 1, w - 2, h - 2, BLACK);
-    fillRect(x + 1, y + h - fill, w - 2, fill - 1, c);
+    if (extract_json_string_value(g_httpBuf, "mission_url", g_s3MissionUrl, sizeof(g_s3MissionUrl)) == 0) {
+        g_missionReady = 1;
+    }
+
+    if (strstr(g_httpBuf, "\"mission_ready\":true") || strstr(g_httpBuf, "MISSION_READY")) {
+        g_missionReady = 1;
+    }
+
+    sl_Close(g_sockID);
+    g_sockID = -1;
+    g_lastCloudError = 0;
+    return 0;
+}
+
+static int awsShadowUpdate(int roundDone)
+{
+    char payload[512];
+    int payloadLen;
+    int ret;
+
+    snprintf(g_lastCloudOp, sizeof(g_lastCloudOp), "SYNC");
+    if (ensureTlsSocket() < 0) return -1;
+
+    payloadLen = snprintf(payload, sizeof(payload),
+                          "{\"state\":{\"reported\":{\"project\":\"AEGIS-172\",\"cmd\":\"%s\",\"phase\":\"%s\","
+                          "\"mission_level\":%d,\"defender_score\":%d,\"attacker_score\":%d,\"threat\":%d,"
+                          "\"sector\":%d,\"shield\":%d,\"distance\":%d,\"winner\":\"%s\",\"round_done\":%s,"
+                          "\"telemetry_drops\":%lu}}}",
+                          roundDone ? "ROUND_DONE" : "ROUND_UPDATE",
+                          stateLabel(g_state),
+                          g_missionDifficulty,
+                          g_defenderScore,
+                          g_attackerScore,
+                          g_cachedThreat,
+                          g_cachedThreatSector,
+                          g_shieldSector,
+                          g_sensor.distCm,
+                          winnerLabel(),
+                          roundDone ? "true" : "false",
+                          g_softParseFail);
+    if (payloadLen <= 0 || payloadLen >= (int)sizeof(payload)) {
+        g_lastCloudError = -3;
+        return -1;
+    }
+
+    ret = http_post_json(g_sockID, payload);
+    if (ret < 0) {
+        sl_Close(g_sockID);
+        g_sockID = -1;
+        g_cloudOnline = 0;
+        g_lastCloudError = ret;
+        g_nextCloudRetryLoop = g_loopCount + CLOUD_RETRY_COOLDOWN_LOOPS;
+        return -1;
+    } else {
+        sl_Close(g_sockID);
+        g_sockID = -1;
+        g_cloudOnline = 1;
+        g_shadowDirty = 0;
+        g_lastCloudError = 0;
+    }
+    return 0;
+}
+
+static int publishRoundEvent(void)
+{
+    int ret = awsShadowUpdate(1);
+    if (ret == 0) {
+        g_roundReported = 1;
+        return 0;
+    }
+
+    UART_PRINT("SYNC publish failed: ret=%d err=%d\r\n", ret, g_lastCloudError);
+    return ret;
+}
+
+static void updateShieldFromJoystick(void)
+{
+    static int lastSector = 7;
+    int joy = g_sensor.joy;
+    int targetSector;
+
+    if (absInt(joy - 512) < 96) {
+        joy = 512;
+    }
+
+    targetSector = clampInt((joy * (SECTOR_COUNT - 1)) / 1023, 0, SECTOR_COUNT - 1);
+    if (absInt(targetSector - lastSector) >= 2) {
+        lastSector = targetSector;
+    }
+
+    g_shieldSector = lastSector;
+    g_servoDeg = 20 + ((140 * g_shieldSector) / (SECTOR_COUNT - 1));
+}
+
+static void setState(RoundState next)
+{
+    g_state = next;
+    g_stateStartLoop = g_loopCount;
+    g_shadowDirty = 1;
+
+    if (g_state == RS_BOOT) {
+        updateShieldFromJoystick();
+        g_stepMode = 0;
+        g_buzzMode = 0;
+        g_rgbCode = 6;
+        g_attackPulseUntil = 0;
+        g_attackJamUntil = 0;
+        g_attackBlindUntil = 0;
+    } else if (g_state == RS_CALIBRATE) {
+        g_calDistSum = 0;
+        g_calLuxSum = 0;
+        g_calTempSum = 0;
+        g_calHumSum = 0;
+        g_calCount = 0;
+        updateShieldFromJoystick();
+        g_stepMode = 2;
+        g_buzzMode = 0;
+        g_rgbCode = 6;
+        g_attackPulseUntil = 0;
+        g_attackJamUntil = 0;
+        g_attackBlindUntil = 0;
+    } else if (g_state == RS_MISSION) {
+        updateShieldFromJoystick();
+        g_stepMode = 2;
+        g_buzzMode = 0;
+        g_rgbCode = 5;
+        g_missionReady = 0;
+        g_lastMissionRequestLoop = g_loopCount - MISSION_REQUEST_RETRY_LOOPS;
+        g_lastMissionPollLoop = g_loopCount;
+    } else if (g_state == RS_PREP) {
+        updateShieldFromJoystick();
+        g_stepMode = 2;
+        g_buzzMode = 0;
+        g_rgbCode = 5;
+    } else if (g_state == RS_ACTIVE) {
+        g_defenderScore = 0;
+        g_attackerScore = 0;
+        g_lastScoreLoop = g_loopCount;
+        g_stepMode = 2;
+        g_roundReported = 0;
+    } else if (g_state == RS_JUDGE) {
+        g_stepMode = 0;
+        g_buzzMode = 0;
+        g_rgbCode = (g_defenderScore >= g_attackerScore) ? 1 : 3;
+    } else if (g_state == RS_SYNC) {
+        g_stepMode = 0;
+        g_buzzMode = 0;
+        g_rgbCode = 6;
+        g_roundReported = 0;
+        g_lastShadowLoop = g_loopCount - SYNC_RETRY_LOOPS;
+    } else {
+        g_stepMode = 0;
+        g_buzzMode = 0;
+        g_rgbCode = (g_defenderScore >= g_attackerScore) ? 1 : 3;
+    }
+
+    UART_PRINT("STATE -> %s\n\r", stateLabel(g_state));
+}
+
+static void sendControlFrame(void)
+{
+    static int lastServo = -999;
+    static int lastStep = -999;
+    static int lastBuzz = -999;
+    static int lastRgb = -999;
+    static int lastState = -999;
+    char out[96];
+    int changed;
+
+    changed = (g_servoDeg != lastServo) ||
+              (g_stepMode != lastStep) ||
+              (g_buzzMode != lastBuzz) ||
+              (g_rgbCode != lastRgb) ||
+              ((int)g_state != lastState);
+
+    if (!changed && loopsSince(g_lastControlLoop) < CONTROL_KEEPALIVE_LOOPS) return;
+    if (changed && loopsSince(g_lastControlLoop) < CONTROL_INTERVAL_LOOPS) return;
+
+    g_lastControlLoop = g_loopCount;
+    snprintf(out, sizeof(out), "$C,%d,%d,%d,%d,%d\n",
+             g_servoDeg, g_stepMode, g_buzzMode, g_rgbCode, (int)g_state);
+    Uart1TxString(out);
+    lastServo = g_servoDeg;
+    lastStep = g_stepMode;
+    lastBuzz = g_buzzMode;
+    lastRgb = g_rgbCode;
+    lastState = (int)g_state;
+}
+
+static int parseSensorFrame(const char *line)
+{
+    unsigned long ms = 0;
+    int sector = 0;
+    int distCm = 0;
+    int lux = 0;
+    int tilt = 0;
+    int tempC10 = 0;
+    int hum10 = 0;
+    int aux = 0;
+    int joy = 0;
+
+    if (sscanf(line, "$S,%lu,%d,%d,%d,%d,%d,%d,%d,%d",
+               &ms, &sector, &distCm, &lux, &tilt, &tempC10, &hum10, &aux, &joy) == 9) {
+        g_sensor.ms = ms;
+        g_sensor.sector = clampInt(sector, 0, SECTOR_COUNT - 1);
+        g_sensor.distCm = clampInt(distCm, 2, 400);
+        g_sensor.lux = clampInt(lux, 0, 1023);
+        g_sensor.tilt = 0;
+        g_sensor.tempC10 = clampInt(tempC10, -200, 800);
+        g_sensor.hum10 = clampInt(hum10, 0, 1000);
+        g_sensor.aux = aux;
+        g_sensor.joy = clampInt(joy, 0, 1023);
+        g_lastSensorLoop = g_loopCount;
+        g_waitingForSensor = 0;
+        g_softParseOk++;
+        return 0;
+    }
+
+    g_softParseFail++;
+    return -1;
+}
+
+static void handleIrButton(int button)
+{
+    if (button == BTN_ABORT || button == BTN_RESET) {
+        setState(RS_BOOT);
+        return;
+    }
+
+    if (button == BTN_DIFF_UP) {
+        g_missionDifficulty = clampInt(g_missionDifficulty + 1, 1, 5);
+        g_shadowDirty = 1;
+        return;
+    }
+
+    if (button == BTN_DIFF_DOWN) {
+        g_missionDifficulty = clampInt(g_missionDifficulty - 1, 1, 5);
+        g_shadowDirty = 1;
+        return;
+    }
+
+    if ((button == BTN_START || button == BTN_MISSION) && (g_state == RS_BOOT || g_state == RS_END)) {
+        g_forceLocalMission = (button == BTN_START) ? 0 : 0;
+        setState(RS_CALIBRATE);
+        return;
+    }
+
+    if (button == BTN_MISSION && g_state == RS_MISSION) {
+        requestCloudMission();
+        return;
+    }
+
+    if (button == BTN_SYNC && g_state == RS_END) {
+        setState(RS_SYNC);
+        return;
+    }
+
+    if (g_state != RS_ACTIVE) return;
+
+    if (button == BTN_ATTACK_PULSE) {
+        g_attackPulseUntil = g_loopCount + ATTACK_PULSE_LOOPS;
+        g_attackAction = BTN_ATTACK_PULSE;
+    } else if (button == BTN_ATTACK_JAM) {
+        g_attackJamUntil = g_loopCount + ATTACK_JAM_LOOPS;
+        g_attackAction = BTN_ATTACK_JAM;
+    } else if (button == BTN_ATTACK_BLIND) {
+        g_attackBlindUntil = g_loopCount + ATTACK_BLIND_LOOPS;
+        g_attackAction = BTN_ATTACK_BLIND;
+    }
+}
+
+static int resolveThreatSector(void)
+{
+    int sector = g_sensor.sector;
+    if (g_attackJamUntil > g_loopCount) {
+        sector = (sector + 3) % SECTOR_COUNT;
+    }
+    return sector;
+}
+
+static int computeThreatLevel(void)
+{
+    int threat = 0;
+    int dist = g_sensor.distCm;
+    int luxDelta = absInt(g_sensor.lux - g_baseLux);
+    int tempDelta = absInt(g_sensor.tempC10 - g_baseTemp10);
+
+    if (g_attackBlindUntil > g_loopCount) luxDelta += 220;
+
+    if (dist < DIST_FAR) threat += 1;
+    if (dist < DIST_MED) threat += 1;
+    if (dist < DIST_NEAR) threat += 1;
+
+    if (luxDelta > 120) threat += 1;
+    if (luxDelta > 260) threat += 1;
+
+    if (tempDelta > 20) threat += 1;
+
+    if (g_attackPulseUntil > g_loopCount) threat += 2;
+    if (g_attackJamUntil > g_loopCount) threat += 1;
+    if (g_attackBlindUntil > g_loopCount) threat += 1;
+
+    threat += clampInt(g_missionDifficulty - 1, 0, 2);
+    return clampInt(threat, 0, 15);
+}
+
+static void updateGameplayOutputs(int threat)
+{
+    if (loopsSince(g_lastSensorLoop) > SENSOR_TIMEOUT_LOOPS) {
+        g_buzzMode = 2;
+        g_rgbCode = 3;
+        return;
+    }
+
+    if (threat >= 7) {
+        g_buzzMode = 1;
+        g_rgbCode = 3;
+    } else if (threat >= 3) {
+        g_buzzMode = 2;
+        g_rgbCode = 2;
+    } else {
+        g_buzzMode = 0;
+        g_rgbCode = 1;
+    }
+}
+
+static void updateStateMachine(void)
+{
+    unsigned long elapsed = loopsSince(g_stateStartLoop);
+    int threat;
+    int threatSector;
+    int delta;
+    int blocked;
+
+    updateShieldFromJoystick();
+
+    if (g_state == RS_BOOT) {
+        return;
+    }
+
+    if (g_state == RS_CALIBRATE) {
+        g_calDistSum += g_sensor.distCm;
+        g_calLuxSum += g_sensor.lux;
+        g_calTempSum += g_sensor.tempC10;
+        g_calHumSum += g_sensor.hum10;
+        g_calCount++;
+
+        if (elapsed >= CALIBRATE_LOOPS) {
+            if (g_calCount > 0) {
+                g_baseDist = (int)(g_calDistSum / g_calCount);
+                g_baseLux = (int)(g_calLuxSum / g_calCount);
+                g_baseTemp10 = (int)(g_calTempSum / g_calCount);
+                g_baseHum10 = (int)(g_calHumSum / g_calCount);
+            }
+            setState(RS_MISSION);
+        }
+        return;
+    }
+
+    if (g_state == RS_MISSION) {
+        if (elapsed >= MISSION_WAIT_LOOPS) {
+            setState(RS_PREP);
+        }
+        return;
+    }
+
+    if (g_state == RS_PREP) {
+        if (elapsed >= PREP_LOOPS) {
+            setState(RS_ACTIVE);
+        }
+        return;
+    }
+
+    if (g_state == RS_ACTIVE) {
+        threatSector = resolveThreatSector();
+        threat = computeThreatLevel();
+        delta = absInt(g_shieldSector - threatSector);
+        if (delta > (SECTOR_COUNT / 2)) delta = SECTOR_COUNT - delta;
+        blocked = (delta <= BLOCK_WINDOW_SECTORS);
+
+        g_cachedThreat = threat;
+        g_cachedThreatSector = threatSector;
+        g_cachedBlocked = blocked;
+
+        if (loopsSince(g_lastScoreLoop) >= SCORE_INTERVAL_LOOPS) {
+            g_lastScoreLoop = g_loopCount;
+
+            if (threat >= 6) {
+                if (blocked) g_defenderScore += 3 + threat;
+                else g_attackerScore += 1 + threat;
+            } else if (threat >= 3) {
+                if (blocked) g_defenderScore += 2 + threat;
+                else g_attackerScore += 1 + threat;
+            } else {
+                g_defenderScore += 1;
+            }
+
+            g_shadowDirty = 1;
+        }
+
+        updateGameplayOutputs(threat);
+
+        if (elapsed >= ACTIVE_ROUND_LOOPS) {
+            setState(RS_JUDGE);
+        }
+        return;
+    }
+
+    if (g_state == RS_JUDGE) {
+        if (elapsed >= JUDGE_LOOPS) {
+            setState(RS_SYNC);
+        }
+        return;
+    }
+
+    if (g_state == RS_SYNC) {
+        if (!g_roundReported && loopsSince(g_lastShadowLoop) >= SYNC_RETRY_LOOPS) {
+            g_lastShadowLoop = g_loopCount;
+            publishRoundEvent();
+        }
+
+        if (elapsed >= SYNC_LOOPS) {
+            setState(RS_END);
+        }
+        return;
+    }
+}
+
+static void drawText(int x, int y, unsigned int fg, unsigned int bg, const char *text)
+{
+    setTextColor(fg, bg);
+    setCursor(x, y);
+    Outstr((char *)text);
+}
+
+static void drawSectorMarkers(int cx, int cy)
+{
+    int i;
+    int x0;
+    int y0;
+    int x1;
+    int y1;
+
+    for (i = 0; i < SECTOR_COUNT; i += 2) {
+        x0 = cx + (g_sectorDx[i] * 24) / 32;
+        y0 = cy + (g_sectorDy[i] * 24) / 32;
+        x1 = cx + g_sectorDx[i];
+        y1 = cy + g_sectorDy[i];
+        drawLine(x0, y0, x1, y1, BLUE);
+    }
+}
+
+static void drawRadar(void)
+{
+    int cx = 64;
+    int cy = 66;
+    int threatX = cx + g_sectorDx[g_cachedThreatSector];
+    int threatY = cy + g_sectorDy[g_cachedThreatSector];
+    int shieldX = cx + (g_sectorDx[g_shieldSector] * 22) / 32;
+    int shieldY = cy + (g_sectorDy[g_shieldSector] * 22) / 32;
+    int sweepX = cx + g_sectorDx[g_sensor.sector];
+    int sweepY = cy + g_sectorDy[g_sensor.sector];
+
+    drawCircle(cx, cy, 34, WHITE);
+    drawCircle(cx, cy, 22, BLUE);
+    drawSectorMarkers(cx, cy);
+    drawLine(cx, cy, sweepX, sweepY, CYAN);
+    fillCircle(threatX, threatY, 4, (g_cachedThreat >= 9) ? RED : YELLOW);
+    fillCircle(shieldX, shieldY, 4, GREEN);
+    fillCircle(cx, cy, 3, WHITE);
+
+    if (g_cachedBlocked) {
+        drawLine(shieldX, shieldY, threatX, threatY, GREEN);
+    } else if (g_state == RS_ACTIVE) {
+        drawLine(shieldX, shieldY, threatX, threatY, RED);
+    }
+}
+
+static void drawThreatMeter(int threat)
+{
+    int i;
+    int x = 100;
+    int y = 34;
+
+    drawText(98, 24, CYAN, BLACK, "TH");
+    drawRect(x - 2, y - 2, 18, 52, WHITE);
+    for (i = 0; i < 15; i++) {
+        unsigned int color = (i < 5) ? GREEN : ((i < 10) ? YELLOW : RED);
+        if (i < threat) {
+            fillRect(x, y + (14 - i) * 3, 12, 2, color);
+        } else {
+            fillRect(x, y + (14 - i) * 3, 12, 2, BLACK);
+        }
+    }
 }
 
 static void drawOLED(void)
 {
-    char line[32];
+    char line[40];
+    char line2[40];
+    unsigned long elapsed = loopsSince(g_stateStartLoop);
+    int remaining = 0;
+    int currentAttackMode;
+    static int s_init = 0;
+    static RoundState s_state = (RoundState)(-1);
+    static int s_cloudOnline = -1;
+    static int s_missionReady = -1;
+    static int s_missionDifficulty = -1;
+    static int s_defenderScore = -1;
+    static int s_attackerScore = -1;
+    static int s_sensorSector = -1;
+    static int s_shieldSector = -1;
+    static int s_threatSector = -1;
+    static int s_threat = -1;
+    static int s_blocked = -1;
+    static int s_dist = -1;
+    static int s_remaining = -1;
+    static int s_attackMode = -1;
+    int headerDirty;
+    int scoreDirty;
+    int radarDirty;
+    int footerDirty;
 
-    fillRect(0, 0, 128, 16, BLUE);
-    setCursor(2, 4);
-    if (g_mode == MODE_IDLE) strcpy(line, "IDLE");
-    else if (g_mode == MODE_MANUAL) strcpy(line, "MANUAL");
-    else if (g_mode == MODE_AVOID) strcpy(line, "AVOID");
-    else strcpy(line, "PARK");
-    Outstr(line);
+    if (loopsSince(g_lastDrawLoop) < DRAW_INTERVAL_LOOPS) return;
+    g_lastDrawLoop = g_loopCount;
 
-    snprintf(line, sizeof(line), " S:%03d", g_speed);
-    setCursor(70, 4); Outstr(line);
-
-    fillRect(0, 16, 128, 96, BLACK);
-    drawRect(56, 56, 16, 16, WHITE); // car center
-
-    drawBar(58, 20, 12, 28, g_front);
-    drawBar(98, 58, 12, 28, g_right);
-    drawBar(18, 58, 12, 28, g_left);
-    drawBar(58, 90, 12, 18, g_rear);
-
-    fillRect(0, 112, 128, 16, CYAN);
-    snprintf(line, sizeof(line), "F%03d R%03d L%03d B%03d", g_front, g_right, g_left, g_rear);
-    setCursor(0, 116); Outstr(line);
-}
-
-static void handleIrButton(int b)
-{
-    if (b == 10) {
-        g_mode = MODE_IDLE;
-        g_targetSpeed = 0;
-        g_targetSteer = 0;
-        return;
-    }
-
-    if (b == 1) g_mode = MODE_MANUAL;
-    else if (b == 2 && g_mode == MODE_IDLE) g_mode = MODE_AVOID;
-    else if (b == 3) {
-        g_mode = MODE_PARK;
-        g_parkState = PARK_SEARCH_GAP;
-        g_parkCounter = 0;
-    }
-
-    if (g_mode != MODE_MANUAL) return;
-
-    if (b == 2) { g_targetSpeed = g_speed; g_targetSteer = 0; }
-    else if (b == 8) { g_targetSpeed = -g_speed / 2; g_targetSteer = 0; }
-    else if (b == 4) { g_targetSteer = -45; }
-    else if (b == 6) { g_targetSteer = 45; }
-    else if (b == 5) { g_targetSpeed = 0; g_targetSteer = 0; }
-    else if (b == 12 && g_speed < 95) { g_speed += 5; }
-    else if (b == 13 && g_speed > 15) { g_speed -= 5; }
-}
-
-static void runAvoidLogic(void)
-{
-    if (g_front < DIST_NEAR) {
-        if (g_left < DIST_NEAR && g_right < DIST_NEAR) {
-            g_targetSpeed = -25;
-            g_targetSteer = (g_left > g_right) ? -40 : 40;
-        } else if (g_left > g_right) {
-            g_targetSpeed = 25;
-            g_targetSteer = -45;
-        } else {
-            g_targetSpeed = 25;
-            g_targetSteer = 45;
+    if (g_state == RS_ACTIVE) {
+        if (elapsed < ACTIVE_ROUND_LOOPS) {
+            remaining = (int)((ACTIVE_ROUND_LOOPS - elapsed) / 50);
         }
-    } else {
-        g_targetSteer = 0;
-        if (g_front > DIST_FAR) g_targetSpeed = g_speed;
-        else g_targetSpeed = (g_speed * g_front) / DIST_FAR;
+    } else if (g_state == RS_PREP) {
+        remaining = (int)((PREP_LOOPS - elapsed) / 40);
     }
+    if (remaining < 0) remaining = 0;
+    currentAttackMode = attackMode();
+
+    if (!s_init || s_state != g_state) {
+        fillScreen(BLACK);
+        fillRect(0, 0, 128, 14, BLUE);
+        fillRect(0, 108, 128, 20, CYAN);
+        drawText(4, 18, CYAN, BLACK, "DEF");
+        drawText(4, 48, MAGENTA, BLACK, "ATK");
+        s_init = 1;
+        s_cloudOnline = -1;
+        s_missionReady = -1;
+        s_missionDifficulty = -1;
+        s_defenderScore = -1;
+        s_attackerScore = -1;
+        s_sensorSector = -1;
+        s_shieldSector = -1;
+        s_threatSector = -1;
+        s_threat = -1;
+        s_blocked = -1;
+        s_dist = -1;
+        s_remaining = -1;
+        s_attackMode = -1;
+    }
+
+    headerDirty = (s_state != g_state) ||
+                  (s_cloudOnline != g_cloudOnline) ||
+                  (s_missionReady != g_missionReady) ||
+                  (s_missionDifficulty != g_missionDifficulty);
+    scoreDirty = (s_state != g_state) ||
+                 (s_defenderScore != g_defenderScore) ||
+                 (s_attackerScore != g_attackerScore);
+    radarDirty = (s_state != g_state) ||
+                 (s_sensorSector != g_sensor.sector) ||
+                 (s_shieldSector != g_shieldSector) ||
+                 (s_threatSector != g_cachedThreatSector) ||
+                 (s_threat != g_cachedThreat) ||
+                 (s_blocked != g_cachedBlocked);
+    footerDirty = (s_state != g_state) ||
+                  (s_threat != g_cachedThreat) ||
+                  (s_dist != g_sensor.distCm) ||
+                  (s_shieldSector != g_shieldSector) ||
+                  (s_threatSector != g_cachedThreatSector) ||
+                  (s_remaining != remaining) ||
+                  (s_attackMode != currentAttackMode);
+
+    if (headerDirty) {
+        fillRect(0, 0, 128, 14, BLUE);
+        drawText(2, 3, WHITE, BLUE, stateLabel(g_state));
+        snprintf(line, sizeof(line), "M%d %-5s", g_missionDifficulty, cloudLabel());
+        drawText(56, 3, WHITE, BLUE, line);
+    }
+
+    if (scoreDirty) {
+        fillRect(0, 28, 24, 12, BLACK);
+        snprintf(line, sizeof(line), "%03d", g_defenderScore % 1000);
+        drawText(4, 30, WHITE, BLACK, line);
+
+        fillRect(0, 58, 24, 12, BLACK);
+        snprintf(line, sizeof(line), "%03d", g_attackerScore % 1000);
+        drawText(4, 60, WHITE, BLACK, line);
+    }
+
+    if (radarDirty) {
+        fillRect(24, 16, 96, 92, BLACK);
+        drawRadar();
+        drawThreatMeter(g_cachedThreat);
+        if (g_state == RS_END) {
+            fillRect(20, 46, 88, 22, BLACK);
+            drawRect(20, 46, 88, 22, WHITE);
+            snprintf(line, sizeof(line), "%s WINS", winnerLabel());
+            drawText(34, 53, WHITE, BLACK, line);
+        }
+    }
+
+    if (footerDirty) {
+        fillRect(0, 108, 128, 20, CYAN);
+        if (g_state == RS_BOOT) {
+            drawText(2, 111, BLACK, CYAN, "1 START  5 RESET");
+            drawText(2, 119, BLACK, CYAN, "GRN=YOU ORG=THRT");
+        } else if (g_state == RS_CALIBRATE) {
+            drawText(2, 111, BLACK, CYAN, "CALIBRATING");
+            drawText(2, 119, BLACK, CYAN, "HOLD STEADY");
+        } else if (g_state == RS_MISSION) {
+            drawText(2, 111, BLACK, CYAN, "AWS MISSION");
+            snprintf(line, sizeof(line), "M%d %-5s", g_missionDifficulty, cloudLabel());
+            drawText(2, 119, BLACK, CYAN, line);
+        } else if (g_state == RS_PREP) {
+            drawText(2, 111, BLACK, CYAN, "JOY MOVE  HAND THRT");
+            snprintf(line, sizeof(line), "4/6/8 ATK   %02d", remaining);
+            drawText(2, 119, BLACK, CYAN, line);
+        } else if (g_state == RS_ACTIVE) {
+            snprintf(line, sizeof(line), "TH%02d D%03d %s", g_cachedThreat, g_sensor.distCm, attackLabel());
+            drawText(2, 111, BLACK, CYAN, line);
+            snprintf(line2, sizeof(line2), "JOY SHLD  4P6J8B");
+            drawText(2, 119, BLACK, CYAN, line2);
+        } else if (g_state == RS_END) {
+            drawText(2, 111, BLACK, CYAN, "END 5 RESET");
+            snprintf(line, sizeof(line), "%s WINS", winnerLabel());
+            drawText(2, 119, BLACK, CYAN, line);
+        } else {
+            snprintf(line, sizeof(line), "T%02d D%03d %-5s", g_cachedThreat, g_sensor.distCm, attackLabel());
+            drawText(2, 111, BLACK, CYAN, line);
+            snprintf(line2, sizeof(line2), "S%02d H%02d %02d", g_cachedThreatSector, g_shieldSector, remaining);
+            drawText(2, 119, BLACK, CYAN, line2);
+        }
+    }
+
+    s_state = g_state;
+    s_cloudOnline = g_cloudOnline;
+    s_missionReady = g_missionReady;
+    s_missionDifficulty = g_missionDifficulty;
+    s_defenderScore = g_defenderScore;
+    s_attackerScore = g_attackerScore;
+    s_sensorSector = g_sensor.sector;
+    s_shieldSector = g_shieldSector;
+    s_threatSector = g_cachedThreatSector;
+    s_threat = g_cachedThreat;
+    s_blocked = g_cachedBlocked;
+    s_dist = g_sensor.distCm;
+    s_remaining = remaining;
+    s_attackMode = currentAttackMode;
 }
 
-static void runParkLogic(void)
+static void logStatus(void)
 {
-    g_parkCounter++;
+    if (loopsSince(g_lastLogLoop) < LOG_INTERVAL_LOOPS) return;
+    g_lastLogLoop = g_loopCount;
 
-    switch (g_parkState) {
-        case PARK_SEARCH_GAP:
-            g_targetSpeed = 20;
-            g_targetSteer = 0;
-            if (g_right > 70) {
-                g_parkState = PARK_REQUEST_CLOUD;
-            }
-            break;
-
-        case PARK_REQUEST_CLOUD:
-            g_targetSpeed = 0;
-            g_s3GuidanceFetched = 0;
-            g_s3GuidanceUrl[0] = '\0';
-            g_lastS3GuidanceUrl[0] = '\0';
-            requestCloudParking();
-            g_parkCounter = 0;
-            g_parkState = PARK_WAIT_GUIDANCE;
-            break;
-
-        case PARK_WAIT_GUIDANCE:
-            g_targetSpeed = 0;
-            if (hasCloudGuidance() || g_parkCounter > 20) {
-                g_parkState = PARK_EXEC_1;
-                g_parkCounter = 0;
-            }
-            break;
-
-        case PARK_EXEC_1: // pull forward
-            g_targetSpeed = 20;
-            g_targetSteer = 35;
-            if (g_parkCounter > 10) { g_parkState = PARK_EXEC_2; g_parkCounter = 0; }
-            break;
-
-        case PARK_EXEC_2: // reverse cut
-            g_targetSpeed = -20;
-            g_targetSteer = -45;
-            if (g_parkCounter > 14) { g_parkState = PARK_EXEC_3; g_parkCounter = 0; }
-            break;
-
-        case PARK_EXEC_3: // straighten
-            g_targetSpeed = -15;
-            g_targetSteer = 0;
-            if (g_parkCounter > 10) { g_parkState = PARK_DONE; }
-            break;
-
-        case PARK_DONE:
-        default:
-            g_targetSpeed = 0;
-            g_targetSteer = 0;
-            g_mode = MODE_IDLE;
-            break;
-    }
+    UART_PRINT("DBG state=%s txL=%lu rxB=%lu rxL=%lu ok=%lu bad=%lu ovf=%lu irE=%lu irC=%lu joy=%d dist=%d tilt=%d cloud=%s op=%s err=%d\n\r",
+               stateLabel(g_state),
+               g_uart1TxLines,
+               g_uart1RxBytes,
+               g_uart1RxLines,
+               g_softParseOk,
+               g_softParseFail,
+               g_uart1RxOverflow,
+               g_irEdgeCount,
+               g_irCodeCount,
+               g_sensor.joy,
+               g_sensor.distCm,
+               g_sensor.tilt,
+               cloudLabel(),
+               g_lastCloudOp,
+               g_lastCloudError);
 }
-
-#ifdef SELF_TEST
-static void runSelfTest(int loop)
-{
-    static int sensorPhase = 0;
-    static const char *frames[] = {
-        "$S,090,040,045,080\n", // clear front
-        "$S,045,028,055,070\n", // moderate front
-        "$S,020,015,030,060\n", // near obstacle
-        "$S,075,085,050,055\n", // right-side open gap
-        "$S,060,030,080,040\n"  // left-side open
-    };
-
-    if ((loop % 20) == 0) {
-        strcpy(g_softLine, frames[sensorPhase]);
-        g_softIdx = (int)strlen(g_softLine);
-        g_sensorReady = 1;
-        sensorPhase = (sensorPhase + 1) % (sizeof(frames) / sizeof(frames[0]));
-    }
-
-    if ((loop % 100) == 0) {
-        UART_PRINT("SELF_TEST heartbeat loop=%d mode=%d\n\r", loop, g_mode);
-    }
-
-    if (loop == 10)  { UART_PRINT("SELF_TEST: MANUAL\n\r"); g_mode = MODE_MANUAL; }
-    if (loop == 30)  { UART_PRINT("SELF_TEST: MANUAL FWD\n\r"); g_targetSpeed = g_speed; g_targetSteer = 0; }
-    if (loop == 70)  { UART_PRINT("SELF_TEST: MANUAL STOP\n\r"); g_targetSpeed = 0; g_targetSteer = 0; }
-    if (loop == 100) { UART_PRINT("SELF_TEST: IDLE\n\r"); g_mode = MODE_IDLE; }
-    if (loop == 130) { UART_PRINT("SELF_TEST: AVOID\n\r"); g_mode = MODE_AVOID; }
-    if (loop == 210) { UART_PRINT("SELF_TEST: PARK\n\r"); g_mode = MODE_PARK; g_parkState = PARK_SEARCH_GAP; g_parkCounter = 0; }
-
-    if (loop == 280) { UART_PRINT("SELF_TEST: FORCE COLLISION ON\n\r"); g_selfTestForceCollision = 1; }
-    if (loop == 320) { UART_PRINT("SELF_TEST: FORCE COLLISION OFF\n\r"); g_selfTestForceCollision = 0; }
-
-    if (loop == 380) { UART_PRINT("SELF_TEST: BACK TO IDLE\n\r"); g_mode = MODE_IDLE; g_targetSpeed = 0; g_targetSteer = 0; }
-}
-#endif
 
 int main(void)
 {
-    int loop = 0;
+    int button;
 
     BoardInit();
     PinMuxConfig();
     InitTerm();
     ClearTerm();
 
-    UART_PRINT("\n\rParkPilot booted\n\r");
+    UART_PRINT("\n\rAEGIS-172 booted\n\r");
 
     GPIO_IF_LedConfigure(LED1 | LED3);
     GPIO_IF_LedOff(MCU_ALL_LED_IND);
@@ -778,109 +1326,61 @@ int main(void)
     SPIInit();
     Adafruit_Init();
     fillScreen(BLACK);
+    setTextSize(1);
+    setTextColor(WHITE, BLACK);
 
     IRInit();
     Uart1Init();
-
     I2C_IF_Open(I2C_MASTER_MODE_FST);
 
-#ifndef SELF_TEST
     g_app_config.host = (signed char *)SERVER_NAME;
     g_app_config.port = SERVER_PORT;
 
-    connectToAccessPoint();
-    set_time();
-    g_sockID = tls_connect();
-#else
-    UART_PRINT("SELF_TEST enabled: skipping WiFi/TLS init\n\r");
-#endif
+    if (connectToAccessPoint() == SUCCESS) {
+        set_time();
+        g_sockID = tls_connect();
+        if (g_sockID >= 0) {
+            sl_Close(g_sockID);
+            g_sockID = -1;
+            g_cloudOnline = 1;
+        } else {
+            g_sockID = -1;
+            g_cloudOnline = 0;
+        }
+    }
+
+    setState(RS_BOOT);
 
     while (1) {
-        int accelMag2 = 0;
-
-#ifdef SELF_TEST
-        runSelfTest(loop);
-#endif
-
         Uart1PollRx();
 
-        if (g_codeReady) {
-            int b = IRCodeToButton(g_irCmd);
-            if (b >= 0) handleIrButton(b);
-            g_codeReady = 0;
-        }
-
         if (g_sensorReady) {
-            int parseRet;
-            UART_PRINT("Sensor frame: %s\n\r", g_softLine);
-            parseRet = parseSensorFrame(g_softLine);
-            if (parseRet == 0) {
-                g_softParseOk++;
-            } else {
-                g_softParseFail++;
-                UART_PRINT("Sensor frame parse failed\n\r");
+            if (parseSensorFrame(g_readyLine) == 0) {
+                g_shadowDirty = 1;
             }
             g_softIdx = 0;
             g_softLine[0] = '\0';
+            g_readyLine[0] = '\0';
             g_sensorReady = 0;
         }
 
-        if ((loop % 32) == 0) {
-            UART_PRINT("UART dbg baud=%d rxB=%lu rxL=%lu ok=%lu bad=%lu ovf=%lu\n\r",
-                       UART1_BAUD,
-                       g_uart1RxBytes,
-                       g_uart1RxLines,
-                       g_softParseOk,
-                       g_softParseFail,
-                       g_uart1RxOverflow);
-        }
-
-        if ((loop % 5) == 0) {
-#ifdef SELF_TEST
-            if (g_selfTestForceCollision) {
-                g_collision = 1;
-                g_targetSpeed = 0;
-                g_targetSteer = 0;
-                fillScreen(RED);
-            } else {
-                g_collision = 0;
+        if (g_codeReady) {
+            button = IRCodeToButton(g_irCmd);
+            if (button >= 0 && loopsSince(g_lastIrAcceptLoop) >= IR_DEBOUNCE_LOOPS) {
+                g_lastIrAcceptLoop = g_loopCount;
+                UART_PRINT("IR: raw=0x%04lx btn=%d\n\r", g_irCmd, button);
+                handleIrButton(button);
             }
-#else
-            if (bmaReadAccel(&accelMag2) == 0 && accelMag2 > COLLISION_THRESH2) {
-                g_collision = 1;
-                g_targetSpeed = 0;
-                g_targetSteer = 0;
-                fillScreen(RED);
-            } else {
-                g_collision = 0;
-            }
-#endif
+            g_codeReady = 0;
         }
 
-        if (g_mode == MODE_IDLE) {
-            g_targetSpeed = 0;
-            g_targetSteer = 0;
-        } else if (g_mode == MODE_AVOID) {
-            runAvoidLogic();
-        } else if (g_mode == MODE_PARK) {
-            runParkLogic();
-        }
+        updateStateMachine();
+        sendControlFrame();
 
-        if ((loop % 2) == 0) {
-            sendMotorCommand(g_targetSpeed, g_targetSteer);
-        }
+        drawOLED();
+        logStatus();
 
-        if ((loop % 8) == 0) {
-            drawOLED();
-        }
-
-#ifndef SELF_TEST
-        if ((loop % 16) == 0) {
-            awsShadowUpdate(g_collision);
-        }
-#endif
-
-        MAP_UtilsDelay(120000);
-        loop++;
+        MAP_UtilsDelay(LOOP_DELAY_TICKS);
+        g_loopCount++;
     }
 }
