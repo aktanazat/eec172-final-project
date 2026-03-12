@@ -3,18 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ParkPilot | EEC172 Final Project</title>
+    <title>AEGIS-172 | EEC172 Final Project</title>
     <meta
       name="description"
-      content="ParkPilot is an autonomous obstacle-avoidance and self-parking RC car built on CC3200 with AWS telemetry."
+      content="AEGIS-172 is a two-player cloud-adaptive radar defense arena built on CC3200, UNO coprocessing, and AWS IoT + Lambda + S3."
     />
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <header class="topbar">
       <div class="topbar-inner">
-        <a class="logo" href="#top">PARKPILOT</a>
-
+        <a class="logo" href="#top">AEGIS-172</a>
+        <nav class="top-nav">
+          <a href="#concept">Concept</a>
+          <a href="#loop">Match Loop</a>
+          <a href="#cloud">Cloud Stack</a>
+          <a href="#live">Live Cloud</a>
+          <a href="#stack">System</a>
+          <a href="#demo">Demo Plan</a>
+        </nav>
         <div class="top-actions">
           <a href="proposal.html">Proposal +</a>
         </div>
@@ -22,243 +29,294 @@
     </header>
 
     <main id="top" class="page">
-      <div class="home-stack">
-        <section class="hero reveal">
-        <div class="hero-media-wrap">
-          <div
-            class="hero-media"
-            role="img"
-            aria-label="ParkPilot autonomous control map showing route planning and sensor sweep"
-          >
-            <svg
-              class="hero-map"
-              viewBox="0 0 1600 780"
-              xmlns="http://www.w3.org/2000/svg"
-              xmlns:xlink="http://www.w3.org/1999/xlink"
-            >
-              <defs>
-                <linearGradient id="bg-fade" x1="0%" y1="0%" x2="100%" y2="100%">
-                  <stop offset="0%" stop-color="#141414" />
-                  <stop offset="55%" stop-color="#0e0f11" />
-                  <stop offset="100%" stop-color="#070809" />
-                </linearGradient>
-                <pattern id="scan-grid" width="54" height="54" patternUnits="userSpaceOnUse">
-                  <path d="M54 0H0V54" fill="none" stroke="#27303a" stroke-width="1" />
-                </pattern>
-                <linearGradient id="trace" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stop-color="#96a7b7" stop-opacity="0.1" />
-                  <stop offset="50%" stop-color="#e8eff7" stop-opacity="0.8" />
-                  <stop offset="100%" stop-color="#96a7b7" stop-opacity="0.1" />
-                </linearGradient>
-                <linearGradient id="avoid-trace" x1="0%" y1="0%" x2="100%" y2="0%">
-                  <stop offset="0%" stop-color="#5d6772" stop-opacity="0.1" />
-                  <stop offset="50%" stop-color="#bfc8d2" stop-opacity="0.65" />
-                  <stop offset="100%" stop-color="#5d6772" stop-opacity="0.1" />
-                </linearGradient>
-              </defs>
-
-              <rect x="0" y="0" width="1600" height="780" fill="url(#bg-fade)" />
-              <rect x="0" y="0" width="1600" height="780" fill="url(#scan-grid)" opacity="0.36" />
-
-              <g class="map-blocks" fill="#151a1f" stroke="#2a3139" stroke-width="2">
-                <rect x="140" y="120" width="300" height="178" rx="8" />
-                <rect x="498" y="102" width="254" height="136" rx="8" />
-                <rect x="832" y="126" width="352" height="190" rx="8" />
-                <rect x="1260" y="98" width="208" height="154" rx="8" />
-                <rect x="220" y="402" width="278" height="184" rx="8" />
-                <rect x="584" y="380" width="332" height="164" rx="8" />
-                <rect x="968" y="430" width="418" height="206" rx="8" />
-              </g>
-
-              <path
-                id="route-main"
-                d="M90 654 C254 592, 388 660, 534 586 C686 510, 770 402, 930 418 C1084 430, 1180 520, 1396 470"
-                fill="none"
-              />
-              <path
-                id="route-avoid"
-                d="M278 600 C362 512, 414 484, 502 430 C604 368, 716 350, 826 292"
-                fill="none"
-              />
-              <path
-                id="route-park"
-                d="M1136 558 C1084 532, 1010 472, 982 428 C944 368, 958 312, 1024 284 C1082 258, 1164 276, 1212 322"
-                fill="none"
-              />
-
-              <path
-                class="route route-main"
-                d="M90 654 C254 592, 388 660, 534 586 C686 510, 770 402, 930 418 C1084 430, 1180 520, 1396 470"
-              />
-              <path
-                class="route route-avoid"
-                d="M278 600 C362 512, 414 484, 502 430 C604 368, 716 350, 826 292"
-              />
-              <path
-                class="route route-park"
-                d="M1136 558 C1084 532, 1010 472, 982 428 C944 368, 958 312, 1024 284 C1082 258, 1164 276, 1212 322"
-              />
-
-              <circle class="tracker tracker-main" r="7" fill="#f4f8fc">
-                <animateMotion dur="12s" repeatCount="indefinite" rotate="auto">
-                  <mpath href="#route-main" xlink:href="#route-main" />
-                </animateMotion>
-              </circle>
-
-              <circle class="tracker tracker-avoid" r="5.5" fill="#d4dde6">
-                <animateMotion dur="9s" repeatCount="indefinite" rotate="auto">
-                  <mpath href="#route-avoid" xlink:href="#route-avoid" />
-                </animateMotion>
-              </circle>
-
-              <circle class="tracker tracker-park" r="6" fill="#e9eef6">
-                <animateMotion dur="8s" repeatCount="indefinite" rotate="auto">
-                  <mpath href="#route-park" xlink:href="#route-park" />
-                </animateMotion>
-              </circle>
-            </svg>
-            <div class="scan-sweep" aria-hidden="true"></div>
-          </div>
-        </div>
-
-        <div class="hero-strip">
-          <p class="hero-micro">DESIGNED FOR EEC172<br />BUILT ON CC3200 + ARDUINO</p>
-          <div class="hero-summary">
-            <p class="hero-kicker">PARKPILOT</p>
-            <p>
-              Autonomous obstacle avoidance, self parking, and cloud telemetry on constrained
-              embedded hardware.
+      <section class="hero reveal">
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow">EEC172 Final Project Pivot</p>
+            <h1>Aegis-172</h1>
+            <p class="lede">
+              A two-player cloud-adaptive radar defense arena. One player deploys threats, one player
+              defends sectors in real time. The system fuses live sensor fields, predicts escalation,
+              and reconfigures each round through AWS.
             </p>
+            <div class="hero-tags">
+              <span>CC3200 Core</span>
+              <span>UART + SPI + I2C</span>
+              <span>AWS IoT + Lambda + S3</span>
+              <span>Multi-Sensor Fusion</span>
+            </div>
           </div>
-        </div>
-        </section>
 
-        <section class="editorial">
-        <header class="editorial-head reveal">
-          <h1>Drive. Avoid. Park. Cloud.</h1>
-          <a href="proposal.html">Open Full Proposal</a>
+          <aside class="hero-panel card">
+            <p class="panel-title">Match Snapshot</p>
+            <div class="score-row">
+              <div>
+                <p class="score-label">P1 DEFENDER</p>
+                <p class="score-val" id="hero-defender-score">----</p>
+              </div>
+              <div>
+                <p class="score-label">P2 ATTACKER</p>
+                <p class="score-val" id="hero-attacker-score">----</p>
+              </div>
+            </div>
+            <ul id="hero-run-meta">
+              <li>Waiting for live AWS data</li>
+              <li>Mission, replay, and leaderboard are pulled from S3</li>
+              <li>Refresh this page after a round completes</li>
+            </ul>
+          </aside>
+        </div>
+      </section>
+
+      <section id="concept" class="section reveal">
+        <header class="section-head editorial-head">
+          <p class="section-kicker">Creative Direction</p>
+          <h2>Not a lock. Not a clone. A physical cloud game system.</h2>
+        </header>
+        <div class="card-grid mode-grid">
+          <article class="card mode-card">
+            <h3>Radar Arena</h3>
+            <p>
+              Stepper-driven scan head sweeps sectors while ultrasonic range traces threat motion. RGB and
+              buzzer layers create a high-pressure control room feel.
+            </p>
+          </article>
+          <article class="card mode-card">
+            <h3>Two Roles</h3>
+            <p>
+              Defender uses joystick for shield placement and remote actions. Attacker injects cloud-driven
+              wave pressure and timed anomalies.
+            </p>
+          </article>
+          <article class="card mode-card">
+            <h3>Adaptive Difficulty</h3>
+            <p>
+              Lambda scores reaction latency and sensor anomalies to tune next-round mission intensity in
+              real time.
+            </p>
+          </article>
+          <article class="card mode-card">
+            <h3>Replay Data</h3>
+            <p>
+              Every round emits structured telemetry for deterministic replay, adjudication, and leaderboard
+              ranking from S3 artifacts.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <section id="loop" class="section reveal process">
+        <header class="section-head">
+          <p class="section-kicker">Runtime</p>
+          <h2>Eight-stage competitive loop</h2>
+        </header>
+        <div class="process-track">
+          <article class="step card">
+            <p class="step-num">01</p>
+            <h3>Boot + Sync</h3>
+            <p>Load baseline config and sync shadow state.</p>
+          </article>
+          <article class="step card">
+            <p class="step-num">02</p>
+            <h3>Calibrate</h3>
+            <p>Baseline ultrasonic, light, tilt, and ambient thermal readings.</p>
+          </article>
+          <article class="step card">
+            <p class="step-num">03</p>
+            <h3>Fetch Mission</h3>
+            <p>IoT event triggers Lambda mission generation and S3 mission handoff.</p>
+          </article>
+          <article class="step card">
+            <p class="step-num">04</p>
+            <h3>Threat Sweep</h3>
+            <p>Stepper scan produces sector map and risk gradients.</p>
+          </article>
+          <article class="step card">
+            <p class="step-num">05</p>
+            <h3>Defend</h3>
+            <p>Joystick + IR actions steer servo shield and countermeasure logic.</p>
+          </article>
+          <article class="step card">
+            <p class="step-num">06</p>
+            <h3>Score Stream</h3>
+            <p>Telemetry packets publish hit/miss, response latency, and stability metrics.</p>
+          </article>
+          <article class="step card">
+            <p class="step-num">07</p>
+            <h3>Cloud Judge</h3>
+            <p>Lambda computes winner, penalty model, and next wave seed.</p>
+          </article>
+          <article class="step card">
+            <p class="step-num">08</p>
+            <h3>Replay + Rank</h3>
+            <p>S3 stores round replay JSON and leaderboard snapshot.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="cloud" class="section reveal">
+        <header class="section-head">
+          <p class="section-kicker">AWS Core</p>
+          <h2>IoT, Lambda, and S3 are in the critical path</h2>
         </header>
 
-        <div class="mode-grid">
-          <article class="mode-card reveal" id="drive">
-            <h2>Drive</h2>
-            <p>Direct manual control through IR input with immediate actuator response.</p>
+        <div class="proof-grid">
+          <article class="card proof-card">
+            <h3>IoT Core</h3>
             <ul>
-              <li>Directional steering from remote buttons</li>
-              <li>Speed adjustment from remote keys</li>
-              <li>Live OLED mode and proximity display</li>
+              <li>Shadow desired/reported controls match phases and mission versions</li>
+              <li>MQTT topics carry live telemetry, outcomes, and control events</li>
+              <li>Rules fan events into Lambda pipelines</li>
             </ul>
           </article>
 
-          <article class="mode-card reveal" id="avoid">
-            <h2>Avoid</h2>
-            <p>Continuous obstacle avoidance loop using deterministic threshold logic.</p>
+          <article class="card proof-card">
+            <h3>Lambda</h3>
             <ul>
-              <li>Forward scan with front threshold gate</li>
-              <li>Left-right clearance comparison</li>
-              <li>Reverse and rescan when blocked</li>
+              <li><code>mission_generator</code> creates next-wave JSON from performance history</li>
+              <li><code>score_engine</code> computes weighted score with latency penalties</li>
+              <li><code>replay_builder</code> composes portable run artifact for S3</li>
             </ul>
           </article>
 
-          <article class="mode-card reveal" id="park">
-            <h2>Park</h2>
-            <p>Parallel parking state machine with cloud-guided and local fallback paths.</p>
+          <article class="card proof-card">
+            <h3>S3</h3>
             <ul>
-              <li>Right-side wall following and gap detection</li>
-              <li>Guidance request before park maneuver</li>
-              <li>Sensor-based fine adjustment at completion</li>
-            </ul>
-          </article>
-
-          <article class="mode-card reveal" id="cloud">
-            <h2>Cloud</h2>
-            <p>AWS pipeline for telemetry, parking guidance, and collision alerting.</p>
-            <ul>
-              <li>Device shadow updates for mode and distances</li>
-              <li>Lambda guidance generation and S3 retrieval</li>
-              <li>SNS alert on collision threshold trigger</li>
+              <li>Mission files versioned by run ID and timestamp</li>
+              <li>Telemetry replay files persisted for grading and reproducibility</li>
+              <li>Leaderboard JSON served for project webpage panel</li>
             </ul>
           </article>
         </div>
+      </section>
 
-        <section class="process reveal" id="process">
-          <p class="section-kicker">PROCESS VISUALIZATION</p>
-          <h2>How ParkPilot executes from input to motion</h2>
+      <section id="live" class="section reveal">
+        <header class="section-head">
+          <p class="section-kicker">Live Cloud</p>
+          <h2>Latest AWS round data</h2>
+        </header>
 
-          <div class="process-track">
-            <article class="step">
-              <p class="step-num">01</p>
-              <h3>Mode Select</h3>
-              <p>IR command selects Manual, Auto Avoid, or Self Park.</p>
-            </article>
-
-            <article class="step">
-              <p class="step-num">02</p>
-              <h3>Sense</h3>
-              <p>Arduino streams ultrasonic distances and CC3200 samples BMA222.</p>
-            </article>
-
-            <article class="step">
-              <p class="step-num">03</p>
-              <h3>Decide</h3>
-              <p>CC3200 state machine computes steering and speed decisions.</p>
-            </article>
-
-            <article class="step">
-              <p class="step-num">04</p>
-              <h3>Actuate</h3>
-              <p>UART motor command drives PWM steering servo and motor output.</p>
-            </article>
-
-            <article class="step">
-              <p class="step-num">05</p>
-              <h3>Sync Cloud</h3>
-              <p>Shadow update publishes mode and sensor data to AWS IoT.</p>
-            </article>
-
-            <article class="step">
-              <p class="step-num">06</p>
-              <h3>Guide + Alert</h3>
-              <p>Lambda guidance and SNS collision alerts feed back into operation.</p>
-            </article>
-          </div>
-        </section>
-
-        <div class="proof-grid">
-          <article class="proof-card reveal" id="proof">
-            <h2>Proof Targets</h2>
-            <ul>
-              <li>TBA</li>
+        <div class="card-grid live-grid">
+          <article class="card live-summary">
+            <h3>Latest Round</h3>
+            <div class="live-stat-row">
+              <div>
+                <p class="score-label">Winner</p>
+                <p class="score-val" id="live-winner">----</p>
+              </div>
+              <div>
+                <p class="score-label">Mission</p>
+                <p class="score-val" id="live-mission">--</p>
+              </div>
+            </div>
+            <ul id="live-round-meta">
+              <li>Loading replay and score data</li>
             </ul>
+            <p class="live-links">
+              <a id="live-replay-link" href="#" target="_blank" rel="noreferrer">Replay JSON</a>
+              <a id="live-leaderboard-link" href="#" target="_blank" rel="noreferrer">Leaderboard JSON</a>
+            </p>
           </article>
 
-          <article class="proof-card reveal">
-            <h2>Demo Sequence</h2>
+          <article class="card live-board">
+            <h3>Leaderboard</h3>
+            <div class="leaderboard-head">
+              <span>Run</span>
+              <span>Winner</span>
+              <span>Score</span>
+            </div>
+            <div id="leaderboard-rows" class="leaderboard-rows">
+              <p class="live-empty">Loading leaderboard...</p>
+            </div>
+          </article>
+
+          <article class="card live-status">
+            <h3>How To Read It</h3>
+            <ul>
+              <li><code>NET</code> means the CC3200 is requesting a mission from AWS.</li>
+              <li><code>SYNC</code> means round results are being judged and written back.</li>
+              <li>The website reads the same S3 artifacts the device writes through Lambda.</li>
+              <li>If the panel says unavailable, the bucket URL or CORS still needs browser access.</li>
+            </ul>
+            <p id="live-fetch-status" class="live-fetch-status">Waiting for page load...</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="stack" class="section reveal">
+        <header class="section-head">
+          <p class="section-kicker">Embedded Split</p>
+          <h2>CC3200-first architecture with deterministic coprocessing</h2>
+        </header>
+        <div class="card-grid">
+          <article class="card">
+            <h3>CC3200 Main Controller</h3>
+            <ul>
+              <li>Global state machine and competitive game loop</li>
+              <li>AWS IoT TLS client, shadow sync, HTTPS mission fetch</li>
+              <li>SPI display output through 74HC595 pipeline</li>
+              <li>I2C peripheral control and sensor baseline manager</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>UNO Real-Time Coprocessor</h3>
+            <ul>
+              <li>Stepper scan timing and SG90 shield actuation</li>
+              <li>Ultrasonic sampling and noise-filtered sector reduction</li>
+              <li>Low-latency actuator commands from UART frames</li>
+              <li>Failsafe local halt if command stream stalls</li>
+            </ul>
+          </article>
+          <article class="card">
+            <h3>Sensor + UI Surface</h3>
+            <ul>
+              <li>Ultrasonic, photoresistor, DHT11, tilt, IR receiver</li>
+              <li>Joystick + buttons for defender controls</li>
+              <li>LCD1602 + 4-digit display + RGB + buzzer for operator feedback</li>
+            </ul>
+          </article>
+        </div>
+      </section>
+
+      <section id="demo" class="section reveal">
+        <header class="section-head">
+          <p class="section-kicker">Verification Strategy</p>
+          <h2>Four-minute demo that proves complexity and polish</h2>
+        </header>
+        <div class="card-grid">
+          <article class="card">
+            <h3>Live Sequence</h3>
             <ol>
-              <li>Manual control check</li>
-              <li>Autonomous obstacle avoidance run</li>
-              <li>Self parking pass</li>
-              <li>Telemetry and collision safety check</li>
+              <li>Standalone boot from flash and calibration cycle</li>
+              <li>Cloud mission fetch and version confirmation</li>
+              <li>Two-player round with live score evolution</li>
+              <li>Cloud adjudication and leaderboard write-back</li>
             </ol>
           </article>
-
-          <article class="proof-card reveal">
-            <h2>System Split</h2>
+          <article class="card">
+            <h3>Why this can win the section</h3>
             <ul>
-              <li>CC3200: mode state machine, parking logic, OLED, WiFi telemetry</li>
-              <li>Arduino: ultrasonic reads, UART frames, steering and motor PWM</li>
-              <li>Sensor frame: <code>$S,&lt;front&gt;,&lt;rear&gt;,&lt;left&gt;,&lt;right&gt;\n</code></li>
-              <li>Motor command: <code>$M,&lt;speed_pct&gt;,&lt;steer_angle&gt;\n</code></li>
+              <li>Physical mechatronics and cloud adaptation together</li>
+              <li>Original interaction model with two asymmetric player roles</li>
+              <li>Hard evidence via replay artifacts and telemetry traces</li>
+              <li>Clean wiring and deterministic behavior under time limit</li>
+            </ul>
+          </article>
+          <article class="card proof-card" id="proof">
+            <h3>Current Focus</h3>
+            <ul>
+              <li>Prototype control loop on dual UNO now</li>
+              <li>Keep UART frame contract identical for CC3200 swap-in</li>
+              <li>Integrate AWS pipeline before visual polishing</li>
             </ul>
           </article>
         </div>
-        </section>
-      </div>
+      </section>
     </main>
 
     <footer class="site-footer">
       <div class="footer-inner">
-        <p>PARKPILOT</p>
+        <p>AEGIS-172</p>
         <p>Aktan Azat + Gezheng Kang</p>
         <p>EEC172 - <span id="year"></span></p>
       </div>
