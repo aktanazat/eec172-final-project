@@ -141,6 +141,7 @@ const LIVE_BUCKET = "parkpilot-guidance-658947468902";
 const LIVE_THING = "akge_cc3200_board";
 const LOCAL_LEADERBOARD = "live/leaderboard-latest.json";
 const LOCAL_REPLAY = "live/replay-latest.json";
+const refreshButton = document.getElementById("refresh-cloud-data");
 const leaderboardPaths = [
   LOCAL_LEADERBOARD,
   `https://${LIVE_BUCKET}.s3.us-east-2.amazonaws.com/leaderboard/${LIVE_THING}/latest.json`,
@@ -153,17 +154,24 @@ function formatTimestamp(unixSeconds) {
 }
 
 function replayUrlFromKey(key, preferLocal) {
-  if (preferLocal) return LOCAL_REPLAY;
+  if (preferLocal) return new URL(LOCAL_REPLAY, window.location.href).toString();
   if (!key) return "#";
   return `https://${LIVE_BUCKET}.s3.us-east-2.amazonaws.com/${key}`;
 }
 
-async function fetchJsonWithFallback(urls) {
+function withCacheBust(url) {
+  const nextUrl = new URL(url, window.location.href);
+  nextUrl.searchParams.set("t", String(Date.now()));
+  return nextUrl.toString();
+}
+
+async function fetchJsonWithFallback(urls, forceRefresh = false) {
   let lastError = null;
 
   for (const url of urls) {
     try {
-      const response = await fetch(url, { cache: "no-store" });
+      const requestUrl = forceRefresh ? withCacheBust(url) : url;
+      const response = await fetch(requestUrl, { cache: "no-store" });
       if (!response.ok) {
         lastError = new Error(`HTTP ${response.status}`);
         continue;
@@ -247,22 +255,31 @@ function renderLiveLeaderboard(payload, sourceUrl) {
   }
 }
 
-async function hydrateLiveCloudPanel() {
+async function hydrateLiveCloudPanel(forceRefresh = false) {
   const statusNode = document.getElementById("live-fetch-status");
   if (!statusNode) return;
 
-  statusNode.textContent = "Loading S3 leaderboard...";
+  statusNode.textContent = forceRefresh ? "Refreshing cloud data..." : "Loading cloud data...";
+  if (refreshButton) refreshButton.disabled = true;
 
   try {
-    const { data, url } = await fetchJsonWithFallback(leaderboardPaths);
+    const { data, url } = await fetchJsonWithFallback(leaderboardPaths, forceRefresh);
     renderLiveLeaderboard(data, url);
     statusNode.textContent =
       url === LOCAL_LEADERBOARD
-        ? "Loaded from the latest AWS snapshot bundled with the site"
+        ? "Loaded from the latest deployed AWS snapshot"
         : `Live data loaded from ${url}`;
   } catch (error) {
     statusNode.textContent = `Live data unavailable in browser: ${error.message}`;
+  } finally {
+    if (refreshButton) refreshButton.disabled = false;
   }
+}
+
+if (refreshButton) {
+  refreshButton.addEventListener("click", () => {
+    hydrateLiveCloudPanel(true);
+  });
 }
 
 hydrateLiveCloudPanel();
